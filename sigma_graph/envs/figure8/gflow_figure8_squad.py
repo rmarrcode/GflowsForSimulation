@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 
-from  model.gnn_gflow import GnnGflowPolicy
+from  model.samplers import Sampler
 
 from sigma_graph.data.file_manager import load_graph_files, save_log_2_file, log_done_reward
 from sigma_graph.data.graph.skirmish_graph import MapInfo
@@ -12,11 +12,12 @@ from .agents.skirmish_agents import AgentRed, AgentBlue
 from .rewards.rewards_simple import get_step_engage, get_step_overlay, get_episode_reward_agent
 from . import default_setup as env_setup
 
-local_action_move = env_setup.act.MOVE_LOOKUP
-local_action_turn = env_setup.act.TURN_90_LOOKUP
 import gym
 from gym import spaces
 import torch
+
+local_action_move = env_setup.act.MOVE_LOOKUP
+local_action_turn = env_setup.act.TURN_90_LOOKUP
 
 class GlowFigure8Squad():
     def __init__(self, max_step=40, n_red=1, n_blue=1, **kwargs):
@@ -76,17 +77,24 @@ class GlowFigure8Squad():
     def reset_step(self):
         self.step_counter = 0
 
+    def _get_step_done(self):
+        # reach to max_step
+        if self.step_counter >= self.max_step:
+            return [True] * self.num_red
+        # all Blue agents got terminated
+        if all([self.team_blue[_b].get_health() <= 0 for _b in range(self.num_blue)]):
+            return [True] * self.num_red
+        # done for each Red agent
+        return [self.team_red[_r].get_health() <= 0 for _r in range(self.num_red)]
+
     def step(self, config):
 
-        # print(f'__observation_space {self.__observation_space}')
-        # print(f'self.__action_space {self.__action_space}')
-        # print(f'state shape {self.state_shape}')
-        # print(f'learning agent {self.learning_agent}')
-        # print(f'self.map.g_acs.adj {self.map.g_acs.adj}')
-        # print(f'self.map.g_vis.adj {self.map.g_vis.adj}')
-    
-        # observation space and action space slightly wrong
-        gnn_gflow_policy = GnnGflowPolicy(
+        if self._get_step_done:
+            return {
+                'done': True
+            }
+
+        sampler = Sampler(
             obs_space=self.__observation_space,
             action_space=self.__action_space,
             num_outputs=15,
@@ -105,11 +113,18 @@ class GlowFigure8Squad():
 
         self._reset_agents()
         self._update()
-        print('states')
-        print(self.states)
-        print(np.array(self.states, dtype=np.int8))
-        logits = gnn_gflow_policy.forward(torch.tensor(np.array(self.states, dtype=np.int8)))
-        print(logits)
+        (forward_prob, action) = sampler.forward(torch.tensor(np.array(self.states, dtype=np.int8)))
+        (backward_prob, _) = sampler.backward(torch.tensor(np.array(self.states, dtype=np.int8)))
+        flow = sampler.flow(torch.tensor(np.array(self.states, dtype=np.int8)))
+        self._take_action_red(action)
+        self._take_action_blue()
+        return {
+            'done': False,
+            'forward_prob': forward_prob,
+            'backward_prob': backward_prob,
+            'flow': flow,
+            'action': action
+        }
 
     def _take_action_red(self, n_actions):
         action_penalty = [0] * self.num_red
@@ -191,9 +206,6 @@ class GlowFigure8Squad():
                 mask_idx = self.learning_agent.index(self.team_red[_r].get_id())
                 # masking invalid movements on the given node
                 acts = set(local_action_move.keys())
-                print('self.team_red[_r].get_encoding()')
-                print(self.team_red[_r])
-                print(self.team_red[_r].get_encoding())
                 valid = set(self.map.get_actions_by_node(self.team_red[_r].get_encoding()) + [0])
                 invalid = [_ for _ in acts if _ not in valid]
                 for masking in invalid:
@@ -541,8 +553,6 @@ class GlowFigure8Squad():
         return self.states if self.logger else []
 
     def _log_step_update(self, prev_obs, actions, rewards):
-        print(f'=================== _log_step_update')
-        print(f'self.logger {self.logger}')
         if self.logger is True:
             _r = [[f"red:{_agent.get_id()}", _agent.get_pos_dir(), _agent.get_encoding(), _agent.get_health()]
                   for _agent in self.team_red]

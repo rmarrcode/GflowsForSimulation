@@ -20,8 +20,11 @@ from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP
 from sigma_graph.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
 import model.utils as utils
 
+from torch.distributions import Categorical
 
-class GnnGflowPolicy(TMv2.TorchModelV2, nn.Module):
+local_action_move = env_setup.act.MOVE_LOOKUP
+
+class Sampler(TMv2.TorchModelV2, nn.Module):
     def __init__(
         self,
         obs_space: gym.spaces.Space,
@@ -112,10 +115,34 @@ class GnnGflowPolicy(TMv2.TorchModelV2, nn.Module):
             input_dim=self.HIDDEN_DIM*self.N_HEADS,
             output_dim=15
         )
+        self.aggregator_backward = utils.GeneralGNNPooling(
+            aggregator_name=self.aggregation_fn,
+            input_dim=self.HIDDEN_DIM*self.N_HEADS,
+            output_dim=15
+        )
+        self.aggregator_flow = utils.GeneralGNNPooling(
+            aggregator_name=self.aggregation_fn,
+            input_dim=self.HIDDEN_DIM*self.N_HEADS,
+            output_dim=15
+        )
         self._hiddens, self._logits = utils.create_policy_fc(
             hiddens=self.hiddens,
             activation=activation,
             num_outputs=num_outputs,
+            no_final_linear=no_final_linear,
+            num_inputs=85+num_outputs,
+        )
+        self._hiddens_backward, self._logits_backward = utils.create_policy_fc(
+            hiddens=self.hiddens,
+            activation=activation,
+            num_outputs=num_outputs,
+            no_final_linear=no_final_linear,
+            num_inputs=85+num_outputs,
+        )
+        self._hiddens_flow, self._logits_flow = utils.create_policy_fc(
+            hiddens=self.hiddens,
+            activation=activation,
+            num_outputs=1,
             no_final_linear=no_final_linear,
             num_inputs=85+num_outputs,
         )
@@ -136,12 +163,14 @@ class GnnGflowPolicy(TMv2.TorchModelV2, nn.Module):
         )
         self.to(self.device)
 
+    def convert_discrete_action_to_multidiscrete(self, action):
+        return [action % len(local_action_move), action // len(local_action_move)]
+
     @override(TMv2.TorchModelV2)
     def forward(
         self,
         obs,
     ):
-
         x = utils.efficient_embed_obs_in_map(obs, self.map, self.obs_shapes)
         agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
         
@@ -150,18 +179,64 @@ class GnnGflowPolicy(TMv2.TorchModelV2, nn.Module):
             x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0)
             if self.layernorm: x = norm(x)
         self._features = self.aggregator(x, self.adjacency, agent_nodes=agent_nodes)
-        print(self._features)
         if self.is_hybrid:
             self._features = self._hiddens(torch.cat([self._features, obs], dim=1))
-        logits = self._logits(self._features)
+        probs = self._logits(self._features)
 
-        # return
+        # what does this do
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
-    
+
         logits = torch.nn.functional.softmax(probs, dim=1)
         dist = Categorical(logits)
         sample = dist.sample().tolist()[0]
         action = [self.convert_discrete_action_to_multidiscrete(sample)]
-        return action
+        
+        return (logits[0][sample], action)
+    
+    def backward(
+        self,
+        obs,
+    ):
+        x = utils.efficient_embed_obs_in_map(obs, self.map, self.obs_shapes)
+        agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
+        
+        # inference
+        for conv, norm in zip(self.gats, self.norms):
+            x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0)
+            if self.layernorm: x = norm(x)
+        self._features_backward = self.aggregator_backward(x, self.adjacency, agent_nodes=agent_nodes)
+        if self.is_hybrid:
+            self._features_backward = self._hiddens_backward(torch.cat([self._features_backward, obs], dim=1))
+        probs = self._logits_backward(self._features_backward)
+
+        # what does this do
+        self._last_flat_in = obs.reshape(obs.shape[0], -1)
+
+        logits = torch.nn.functional.softmax(probs, dim=1)
+        print(logits)
+        dist = Categorical(logits)
+        sample = dist.sample().tolist()[0]
+        action = [self.convert_discrete_action_to_multidiscrete(sample)]
+        
+        return (logits[0][sample], action)
+    
+    def flow(
+        self,
+        obs,
+    ):
+        x = utils.efficient_embed_obs_in_map(obs, self.map, self.obs_shapes)
+        agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
+        
+        # inference
+        for conv, norm in zip(self.gats, self.norms):
+            x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0)
+            if self.layernorm: x = norm(x)
+        self._features_flow = self.aggregator_flow(x, self.adjacency, agent_nodes=agent_nodes)
+        if self.is_hybrid:
+            self._features_flow = self._hiddens_flow(torch.cat([self._features_flow, obs], dim=1))
+        probs = self._logits_flow(self._features_flow)
+        
+        return probs
+    
 
 

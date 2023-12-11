@@ -24,6 +24,9 @@ import sigma_graph.envs.figure8.default_setup as default_setup
 #import model  # THIS NEEDS TO BE HERE IN ORDER TO RUN __init__.py!
 #import model.utils as utils
 import model.gnn_gflow 
+
+from trajectory import Trajectory
+
 SEED = 0
 
 from ray.rllib.agents import ppo, dqn, pg, a3c, impala
@@ -212,7 +215,24 @@ def train(
     torch.manual_seed(SEED)
     #outer_configs, _ = create_env_config(config)
     gflowfigure8 = GlowFigure8Squad()
-    gflowfigure8.step()
+
+    trajectory = Trajectory()
+    for i in range(20):
+        step = gflowfigure8.step()
+        if step['done']:
+            continue
+        # TODO: Is collecting rewards like this standard
+        reward = gflowfigure8._episode_rewards()
+        trajectory.add_step(
+            forward_prob=step['forward_prob'],
+            backward_prob=step['backward_prob'],
+            flow=step['flow'],
+            action=step['action'],
+            reward=reward
+        )
+
+    #loss = compute_loss(trajectory)
+
     # train
     # gflowfigure8 = GlowFigure8Squad()
     # while True:
@@ -260,10 +280,6 @@ def run_baselines(
     gflowfigure8 = GlowFigure8Squad()
     gflowfigure8.step(gflow_config)
 
-    #ppo_trainer_custom = ppo.PPOTrainer(
-    #    config=ppo_config, env=env, logger_creator=custom_log_creator(config.name)
-    #)
-    #train(ppo_trainer_custom, config.name, train_time, checkpoint_models, ppo_config)
 
 # parse arguments
 def parse_arguments():
