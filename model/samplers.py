@@ -157,7 +157,7 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         """
         produce debug output and ensure that model is on right device
         """
-        utils.count_model_params(self, print_model=True)
+        #utils.count_model_params(self, print_model=True)
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
@@ -213,7 +213,6 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
 
         logits = torch.nn.functional.softmax(probs, dim=1)
-        print(logits)
         dist = Categorical(logits)
         sample = dist.sample().tolist()[0]
         action = [self.convert_discrete_action_to_multidiscrete(sample)]
@@ -234,9 +233,9 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         self._features_flow = self.aggregator_flow(x, self.adjacency, agent_nodes=agent_nodes)
         if self.is_hybrid:
             self._features_flow = self._hiddens_flow(torch.cat([self._features_flow, obs], dim=1))
-        probs = self._logits_flow(self._features_flow)
+        prob = self._logits_flow(self._features_flow).log()
         
-        return probs
+        return prob
     
 
 

@@ -13,6 +13,8 @@ import tempfile
 import numpy as np
 import random
 import os
+import wandb
+from ray.rllib.agents import ppo, dqn, pg, a3c, impala
 
 # our code
 from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP, TURN_90_LOOKUP
@@ -24,12 +26,23 @@ import sigma_graph.envs.figure8.default_setup as default_setup
 #import model  # THIS NEEDS TO BE HERE IN ORDER TO RUN __init__.py!
 #import model.utils as utils
 import model.gnn_gflow 
-
 from trajectory import Trajectory
+import losses
+import torch.optim as optim
 
+WANDB = False
 SEED = 0
 
-from ray.rllib.agents import ppo, dqn, pg, a3c, impala
+if WANDB:
+    wandb.init(
+        project="training-simulation",
+        
+        config={
+        "learning_rate": 1e5,
+        "epochs": 1000,
+        }
+    )
+
 
 # create env configuration
 def create_env_config(config):
@@ -195,55 +208,46 @@ def train(
     checkpoint_models=True,
     custom_model="graph_transformer_policy",
 ):
-    """
-    runs a set of baseline algorithms on the red v blue gym environment using rllib. the
-    chosen algorithms are from the following list of algorithms:
-    https://docs.ray.io/en/latest/rllib-algorithms.html#available-algorithms-overview
-
-    the only requirements for an algorithm to function with the environment are:
-    (a) Continuous Actions - Yes. (because MultiDiscrete counts as continuous :c...
-        perhaps we can get rid of this requirement by "flattening" our action space into
-        a more simple Discrete action space in the future)
-    (b) Multi-Agent - Yes. Because the red v blue is a multi-agent environment.
-
-    experimentally, ppo was the only one that performed/worked well with the gat model. therefore,
-    the experiments are all focused around its use.
-    """
+    num_red = config['custom_model_config']['nred']
     # get env config/setting seeds
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
     #outer_configs, _ = create_env_config(config)
-    gflowfigure8 = GlowFigure8Squad()
+    gflowfigure8 = GlowFigure8Squad(sampler_config=config)
+    # ???
+    optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=1e5)
+    num_epochs = 1
+    for _ in range(num_epochs):
+        trajectory = Trajectory()
+        gflowfigure8._reset_agents()
+        for i in range(20):
+            optimizer.zero_grad()
+            step = gflowfigure8.step()
+            if step['done']:
+                continue
+            # TODO: multiple agents
+            print(f"step rewards {step['step_reward']}")
+            trajectory.add_step(
+                forward_prob=step['forward_prob'],
+                backward_prob=step['backward_prob'],
+                flow=step['flow'],
+                action=step['action'],
+                reward=step['step_reward']
+            )
+            # TODO: multiple agents
 
-    trajectory = Trajectory()
-    for i in range(20):
-        step = gflowfigure8.step()
-        if step['done']:
-            continue
-        # TODO: Is collecting rewards like this standard
-        reward = gflowfigure8._episode_rewards()
-        trajectory.add_step(
-            forward_prob=step['forward_prob'],
-            backward_prob=step['backward_prob'],
-            flow=step['flow'],
-            action=step['action'],
-            reward=reward
-        )
+        reward = [gflowfigure8._episode_rewards()[0]]
+        trajectory.episode_reward(reward)
 
-    #loss = compute_loss(trajectory)
+        loss = losses.Losses.trajectory_balance(trajectory)
+        if WANDB:
+            wandb.log({"loss": loss, "reward": reward})
 
-    # train
-    # gflowfigure8 = GlowFigure8Squad()
-    # while True:
-    #     terminate, gflowtrace = gflowfigure8.step()
-    #     if terminate:
-    #         break
-    #loop
-    # figure 8 take step
-    # get trace 
-    # calculate loss
-    # save models
+        loss.backward()
+        optimizer.step()
+
+
 
 # run baseline tests with a few different algorithms
 def run_baselines(
@@ -277,8 +281,9 @@ def run_baselines(
         outer_configs, config, trainer_type=ppo, custom_model=custom_model
     )
 
-    gflowfigure8 = GlowFigure8Squad()
-    gflowfigure8.step(gflow_config)
+    # gflowfigure8 = GlowFigure8Squad()
+    # gflowfigure8.step(gflow_config)
+    train(gflow_config)
 
 
 # parse arguments

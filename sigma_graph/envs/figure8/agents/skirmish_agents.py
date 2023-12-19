@@ -19,6 +19,16 @@ class AgentRed(MAgent):
     def close(self):
         pass
 
+    def get_info(self):
+        return ({
+            "uid": self.agent_id,
+            "node": self.agent_node,
+            "code": self.agent_code,
+            "dir": self.agent_dir,
+            "health": self.health,
+            "learn": self.learnable,
+        })
+
 
 class AgentBlue(MAgent):
     def __init__(self, _uid=0, _node=0, _code=None, _dir=0, _health=0, _learn=False, _route=None, _index=None):

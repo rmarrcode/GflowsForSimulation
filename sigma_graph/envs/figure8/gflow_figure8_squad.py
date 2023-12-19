@@ -15,12 +15,13 @@ from . import default_setup as env_setup
 import gym
 from gym import spaces
 import torch
+import torch.nn as nn
 
 local_action_move = env_setup.act.MOVE_LOOKUP
 local_action_turn = env_setup.act.TURN_90_LOOKUP
 
 class GlowFigure8Squad():
-    def __init__(self, max_step=40, n_red=1, n_blue=1, **kwargs):
+    def __init__(self, sampler_config, max_step=40, n_red=1, n_blue=1, **kwargs):
         # setup configs
         self.max_step = max_step
         self.num_red = n_red
@@ -63,6 +64,22 @@ class GlowFigure8Squad():
         self.__observation_space = ObservationSpaces([spaces.Box(low=0, high=1, shape=(self.state_shape,), dtype=np.int8)
                                                     for _ in range(len(self.learning_agent))])
         self.states = [[] for _ in range(len(self.learning_agent))]
+        self.sampler = Sampler(
+            obs_space=self.__observation_space,
+            action_space=self.__action_space,
+            num_outputs=15,
+            model_config={},
+            name='str',
+            map=self.map,
+            graph_obs_token=sampler_config['custom_model_config']['graph_obs_token'],
+            nred=sampler_config['custom_model_config']['nred'],
+            nblue=sampler_config['custom_model_config']['nblue'],
+            aggregation_fn=sampler_config['custom_model_config']['aggregation_fn'],
+            hidden_size=sampler_config['custom_model_config']['hidden_size'],
+            is_hybrid=sampler_config['custom_model_config']['is_hybrid'],
+            conv_type=sampler_config['custom_model_config']['conv_type'],
+            layernorm=sampler_config['custom_model_config']['layernorm']
+        )
 
     def reset(self, force=False):
         if self.in_eval:
@@ -87,44 +104,44 @@ class GlowFigure8Squad():
         # done for each Red agent
         return [self.team_red[_r].get_health() <= 0 for _r in range(self.num_red)]
 
-    def step(self, config):
+    # make actions
+    # update state 
+    # update observation
+    def step(self):
 
-        if self._get_step_done:
-            return {
-                'done': True
-            }
+        # make n actions
 
-        sampler = Sampler(
-            obs_space=self.__observation_space,
-            action_space=self.__action_space,
-            num_outputs=15,
-            model_config={},
-            name='str',
-            map=self.map,
-            graph_obs_token=config['custom_model_config']['graph_obs_token'],
-            nred=config['custom_model_config']['nred'],
-            nblue=config['custom_model_config']['nblue'],
-            aggregation_fn=config['custom_model_config']['aggregation_fn'],
-            hidden_size=config['custom_model_config']['hidden_size'],
-            is_hybrid=config['custom_model_config']['is_hybrid'],
-            conv_type=config['custom_model_config']['conv_type'],
-            layernorm=config['custom_model_config']['layernorm']
-        )
+        # revisit
+        # if self._get_step_done():
+        #     return {
+        #         'done': True
+        #     }
 
-        self._reset_agents()
+        # self._reset_agents()
+        
         self._update()
-        (forward_prob, action) = sampler.forward(torch.tensor(np.array(self.states, dtype=np.int8)))
-        (backward_prob, _) = sampler.backward(torch.tensor(np.array(self.states, dtype=np.int8)))
-        flow = sampler.flow(torch.tensor(np.array(self.states, dtype=np.int8)))
-        self._take_action_red(action)
+        (forward_prob, action) = self.sampler.forward(torch.tensor(np.array(self.states, dtype=np.int8)))
+        print(f'action {action}')
+        (backward_prob, _) = self.sampler.backward(torch.tensor(np.array(self.states, dtype=np.int8)))
+        flow = self.sampler.flow(torch.tensor(np.array(self.states, dtype=np.int8)))
+        action_penalty_red = self._take_action_red(action)
         self._take_action_blue()
-        return {
+        R_engage_B, B_engage_R, R_overlay = self._update()
+        self.agent_interaction(R_engage_B, B_engage_R)
+
+        step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)
+        n_done = self._get_step_done()
+
+        self._log_step_update(prev_obs, n_actions, n_reward)
+
+        return ({
             'done': False,
             'forward_prob': forward_prob,
             'backward_prob': backward_prob,
             'flow': flow,
-            'action': action
-        }
+            'action': action,
+            'step_reward': step_reward
+        })
 
     def _take_action_red(self, n_actions):
         action_penalty = [0] * self.num_red
@@ -315,6 +332,10 @@ class GlowFigure8Squad():
                 self.states[_r] = _state
             # [Debug] test state shape
             # self.states = [[[(_ + self.step_counter) % 2] * self.state_shape] for _ in range(self.num_red)]
+        print('=========================')
+        print(f'R_engage_B {R_engage_B}')
+        print(f'B_engage_R {B_engage_R}')
+        print(f'R_overlay {R_overlay}')
         return R_engage_B, B_engage_R, R_overlay
 
     # update health points for all agents
@@ -337,10 +358,19 @@ class GlowFigure8Squad():
             if _damage_taken_blue >= self.configs["threshold_damage_2_blue"]:
                 self.team_blue[_b].set_end_step(self.step_counter)
 
+    
     def _step_rewards(self, penalties, R_engage_B, B_engage_R, R_overlay):
+        print('-----------')
+        print(penalties)
+        print(R_engage_B)
+        print(B_engage_R)
+        print(R_overlay)
         rewards = penalties
-        if self.rewards["step"]["reward_step_on"] is False:
-            return rewards
+        print(self.rewards["step"]["reward_step_on"])
+        # TODO: Revisit
+        # if self.rewards["step"]["reward_step_on"] is False:
+        #     return rewards
+        
         for agent_r in range(self.num_red):
             rewards[agent_r] += get_step_overlay(R_overlay[agent_r], **self.rewards["step"])
             for agent_b in range(self.num_blue):
@@ -349,6 +379,7 @@ class GlowFigure8Squad():
                                                     team_switch=False, **self.rewards["step"])
         return rewards
 
+    # full 20 steps
     def _episode_rewards(self):
         # gather final states
         _HP_full_r = self.configs["init_health_red"]

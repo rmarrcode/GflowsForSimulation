@@ -150,7 +150,6 @@ class GnnGflowPolicy(TMv2.TorchModelV2, nn.Module):
             x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0)
             if self.layernorm: x = norm(x)
         self._features = self.aggregator(x, self.adjacency, agent_nodes=agent_nodes)
-        print(self._features)
         if self.is_hybrid:
             self._features = self._hiddens(torch.cat([self._features, obs], dim=1))
         logits = self._logits(self._features)

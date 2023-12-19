@@ -80,9 +80,6 @@ class MapInfo:
         return self.counter, len(self.n_name), len(self.n_info), len(self.g_acs), len(self.g_vis)
 
     def get_index_by_name(self, node_name):
-        print('node name')
-        print(self.n_name)
-        print(node_name)
         return self.n_name[node_name]
 
     def get_name_by_index(self, index):
