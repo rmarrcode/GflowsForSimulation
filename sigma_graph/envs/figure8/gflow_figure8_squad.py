@@ -7,6 +7,7 @@ from sigma_graph.data.file_manager import load_graph_files, save_log_2_file, log
 from sigma_graph.data.graph.skirmish_graph import MapInfo
 from sigma_graph.data.data_helper import get_emb_from_name
 
+#from sigma_graph.envs.utils.multiagent_space import ActionSpaces, ObservationSpaces
 from ..utils.multiagent_space import ActionSpaces, ObservationSpaces
 from .agents.skirmish_agents import AgentRed, AgentBlue
 from .rewards.rewards_simple import get_step_engage, get_step_overlay, get_episode_reward_agent
@@ -21,7 +22,7 @@ local_action_move = env_setup.act.MOVE_LOOKUP
 local_action_turn = env_setup.act.TURN_90_LOOKUP
 
 class GlowFigure8Squad():
-    def __init__(self, sampler_config, max_step=40, n_red=1, n_blue=1, **kwargs):
+    def __init__(self, sampler_config, max_step=40, n_red=1, n_blue=1):#, **kwargs):
         # setup configs
         self.max_step = max_step
         self.num_red = n_red
@@ -29,7 +30,7 @@ class GlowFigure8Squad():
         self.step_counter = 0
         self.done_counter = 0
         # "in_eval" will be in kwargs if we are in eval mode. check train.py:create_trainer_config for more information.
-        self.in_eval = "in_eval" in kwargs
+        self.in_eval = "in_eval" in sampler_config #kwargs
         self.n_eval_episodes = 0
 
         # manage environment config arguments
@@ -41,7 +42,7 @@ class GlowFigure8Squad():
         # load default local configs and parse outer arguments
         self.logger = True
         self.invalid_masked = True
-        self._init_env_config(**kwargs)
+        self._init_env_config(**sampler_config['env_config']) #kwargs)
 
         # load env map and patrol routes (loading connectivity & visibility graphs)
         self.map = MapInfo()
@@ -63,6 +64,7 @@ class GlowFigure8Squad():
         # agent obs size: [self: pos(6or27)+dir(4)+flags(2*B) +teamB: pos+next_move(4)+flags(2*B) +teamR: 6*(n_R-1)or27]
         self.__observation_space = ObservationSpaces([spaces.Box(low=0, high=1, shape=(self.state_shape,), dtype=np.int8)
                                                     for _ in range(len(self.learning_agent))])
+        self.obs = [[] for _ in range(len(self.learning_agent))]
         self.states = [[] for _ in range(len(self.learning_agent))]
         self.sampler = Sampler(
             obs_space=self.__observation_space,
@@ -104,10 +106,11 @@ class GlowFigure8Squad():
         # done for each Red agent
         return [self.team_red[_r].get_health() <= 0 for _r in range(self.num_red)]
 
+    # use observation from state var
     # make actions
     # update state 
     # update observation
-    def step(self):
+    def step(self, a_id):
 
         # make n actions
 
@@ -118,21 +121,31 @@ class GlowFigure8Squad():
         #     }
 
         # self._reset_agents()
-        
-        self._update()
-        (forward_prob, action) = self.sampler.forward(torch.tensor(np.array(self.states, dtype=np.int8)))
-        print(f'action {action}')
+        node = self.team_red[0].get_info()["node"]
+
+        prev_obs = self._log_step_prev()
+        self.step_counter += 1
+        # ??? UPDATE TWICE
+        # self._update()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+
+        # states is obs
+        prev_obs = [self.states[a_id],]
+        (forward_prob, action) = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8)))
         (backward_prob, _) = self.sampler.backward(torch.tensor(np.array(self.states, dtype=np.int8)))
         flow = self.sampler.flow(torch.tensor(np.array(self.states, dtype=np.int8)))
+
         action_penalty_red = self._take_action_red(action)
         self._take_action_blue()
-        R_engage_B, B_engage_R, R_overlay = self._update()
+        # ??? UPDATE TWICE
+        # R_engage_B, B_engage_R, R_overlay = self._update()
         self.agent_interaction(R_engage_B, B_engage_R)
 
-        step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)
+        #step_reward = self._step_reward(action_penalty_red, R_engage_B, B_engage_R, R_overlay)
+        step_reward = self._step_reward_test()
         n_done = self._get_step_done()
 
-        self._log_step_update(prev_obs, n_actions, n_reward)
+        self._log_step_update(prev_obs, [action,], [step_reward,])
 
         return ({
             'done': False,
@@ -140,7 +153,8 @@ class GlowFigure8Squad():
             'backward_prob': backward_prob,
             'flow': flow,
             'action': action,
-            'step_reward': step_reward
+            'step_reward': step_reward,
+            'node': node,
         })
 
     def _take_action_red(self, n_actions):
@@ -332,10 +346,6 @@ class GlowFigure8Squad():
                 self.states[_r] = _state
             # [Debug] test state shape
             # self.states = [[[(_ + self.step_counter) % 2] * self.state_shape] for _ in range(self.num_red)]
-        print('=========================')
-        print(f'R_engage_B {R_engage_B}')
-        print(f'B_engage_R {B_engage_R}')
-        print(f'R_overlay {R_overlay}')
         return R_engage_B, B_engage_R, R_overlay
 
     # update health points for all agents
@@ -360,13 +370,7 @@ class GlowFigure8Squad():
 
     
     def _step_rewards(self, penalties, R_engage_B, B_engage_R, R_overlay):
-        print('-----------')
-        print(penalties)
-        print(R_engage_B)
-        print(B_engage_R)
-        print(R_overlay)
         rewards = penalties
-        print(self.rewards["step"]["reward_step_on"])
         # TODO: Revisit
         # if self.rewards["step"]["reward_step_on"] is False:
         #     return rewards
@@ -378,6 +382,16 @@ class GlowFigure8Squad():
                                                     b_engages_r=B_engage_R[agent_b, agent_r],
                                                     team_switch=False, **self.rewards["step"])
         return rewards
+    
+    def _step_reward_test(self):
+        reward = 0
+        for red_i in range(self.num_red):
+            if self.team_red[red_i].get_info()["node"] == 10:
+                reward += 10
+        return reward
+
+    def _episode_rewards_test(self, trajectory):
+        return trajectory.rewards.sum()
 
     # full 20 steps
     def _episode_rewards(self):
@@ -465,8 +479,8 @@ class GlowFigure8Squad():
         _reward_step_args = list(self.rewards["step"].keys())
         _reward_done_args = list(self.rewards["episode"].keys())
         _log_args = list(env_setup.INIT_LOGS.keys())
-
         # loading outer args and overwrite env configs
+        
         for key, value in kwargs.items():
             # assert env_setup.check_args_value(key, value)
             if key in _config_args:
@@ -481,6 +495,7 @@ class GlowFigure8Squad():
                 self.logs[key] = value
             else:
                 print(f"Invalid config argument \'{key}:{value}\'")
+
 
         # set local defaults if not predefined or loaded
         for key in _config_local_args:
@@ -565,6 +580,7 @@ class GlowFigure8Squad():
             r_node = self.map.get_index_by_name(r_code)
             r_dir = env_setup.get_default_dir(init_red["dir"])
             self.team_red[idx].reset(_node=r_node, _code=r_code, _dir=r_dir, _health=HP_red)
+
             if self.configs["fixed_start"] != -1:
                 pos = self.configs["fixed_start"]
                 self.team_red[idx].set_location(pos, self.map.get_name_by_index(pos), 1)

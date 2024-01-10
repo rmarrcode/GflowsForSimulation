@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 # from matplotlib.animation import FuncAnimation, PillowWriter
 from sigma_graph.data.file_manager import check_dir, find_file_in_dir, load_graph_files
 
-
 def agent_log_parser(line) -> dict:
     agent_info = {}
     # parse team info

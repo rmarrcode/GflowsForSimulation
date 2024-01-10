@@ -261,7 +261,6 @@ def save_log_2_file(config, n_step, n_done, agents, prev_obs, actions, obs, rewa
     if not check_dir(_log_path):
         os.makedirs(_log_path)
     file_path = os.path.join(_log_path, "{}done_{}.txt".format(config["log_prefix"], n_done))
-    print(f'file_path {file_path}')
     with open(file_path, 'a+') as f:
         # sys.stdout = f
         _buffer = "Step #{:2d} ".format(n_step)

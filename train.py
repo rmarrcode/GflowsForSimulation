@@ -15,6 +15,7 @@ import random
 import os
 import wandb
 from ray.rllib.agents import ppo, dqn, pg, a3c, impala
+from tqdm import tnrange
 
 # our code
 from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP, TURN_90_LOOKUP
@@ -35,12 +36,12 @@ SEED = 0
 
 if WANDB:
     wandb.init(
-        project="training-simulation",
+        project="graph-training-simulation",
         
-        config={
-        "learning_rate": 1e5,
-        "epochs": 1000,
-        }
+        # config={
+        # "learning_rate": 1e5,
+        # "epochs": 1000,
+        # }
     )
 
 
@@ -52,10 +53,10 @@ def create_env_config(config):
     outer_configs = {
         # FIG8 PARAMETERS
         "env_path": config.env_path,
-        "max_step": config.max_step,
+        # "max_step": config.max_step,
         "act_masked": config.act_masked,
-        "n_red": config.n_red,
-        "n_blue": config.n_blue,
+        # "n_red": config.n_red,
+        # "n_blue": config.n_blue,
         "init_red": config.init_red,
         "init_blue": config.init_blue,
         "init_health_red": config.init_health,
@@ -75,8 +76,6 @@ def create_env_config(config):
         # "is_hybrid": config.is_hybrid,
         # "conv_type": config.conv_type,
         # SCOUT PARAMETERS
-        "num_red": config.n_red,
-        "num_blue": config.n_blue,
     }
     ## i.e. init_red "pos": tuple(x, z) or "L"/"R" region of the map
     # "init_red": [{"pos": (11, 1), "dir": 1}, {"pos": None}, {"pos": "L", "dir": None}]
@@ -106,6 +105,9 @@ def custom_log_creator(log_name, custom_dir="~/ray_results"):
 def create_gflow_config(
     outer_configs, inner_configs, trainer_type=None, custom_model=""
 ):
+    # env = GlowFigure8Squad
+    # setup_env = env(outer_configs)
+    
     GRAPH_OBS_TOKEN = {
         "embed_opt": inner_configs.embed_opt,
         "embed_dir": inner_configs.embed_dir,
@@ -114,8 +116,10 @@ def create_gflow_config(
         "custom_model": custom_model,
         # Extra kwargs to be passed to your model"s c"tor.
         "custom_model_config": {
-            "nred": outer_configs["n_red"],
-            "nblue": outer_configs["n_blue"],
+            # "n_red": config.n_red,
+            # "n_blue": config.n_blue,
+            "nred": inner_configs.n_red,
+            "nblue": inner_configs.n_blue,
             "aggregation_fn": inner_configs.aggregation_fn,
             "hidden_size": inner_configs.hidden_size,
             "is_hybrid": inner_configs.is_hybrid,
@@ -123,82 +127,83 @@ def create_gflow_config(
             "layernorm": inner_configs.layernorm,
             "graph_obs_token": GRAPH_OBS_TOKEN,
         },
+        "env_config": {**outer_configs},
     }
     return CUSTOM_DEFAULTS
     
 
-# create trainer configuration
-def create_trainer_config(
-    outer_configs, inner_configs, trainer_type=None, custom_model=""
-):
-    # check params
-    trainer_types = [dqn, pg, a3c, ppo]
-    assert trainer_type != None, f"trainer_type must be one of {trainer_types}"
+# # create trainer configuration
+# def create_trainer_config(
+#     outer_configs, inner_configs, trainer_type=None, custom_model=""
+# ):
+#     # check params
+#     trainer_types = [dqn, pg, a3c, ppo]
+#     assert trainer_type != None, f"trainer_type must be one of {trainer_types}"
 
-    # initialize env and required config settings
-    env = GlowFigure8Squad
-    setup_env = env(outer_configs)
-    # obs_space = setup_env.observation_space
-    # act_space = setup_env.action_space
-    # policies = {}
-    # for agent_id in setup_env.learning_agent:
-    #    policies[str(agent_id)] = (None, obs_space, act_space, {})
-    # policy mapping function not currently used.
-    # def policy_mapping_fn(agent_id, episode, worker, **kwargs):
-    #    return str(agent_id)
+#     # initialize env and required config settings
+#     env = GlowFigure8Squad
+#     setup_env = env(outer_configs)
+#     # obs_space = setup_env.observation_space
+#     # act_space = setup_env.action_space
+#     # policies = {}
+#     # for agent_id in setup_env.learning_agent:
+#     #    policies[str(agent_id)] = (None, obs_space, act_space, {})
+#     # policy mapping function not currently used.
+#     # def policy_mapping_fn(agent_id, episode, worker, **kwargs):
+#     #    return str(agent_id)
 
-    # create graph obs
-    GRAPH_OBS_TOKEN = {
-        "embed_opt": inner_configs.embed_opt,
-        "embed_dir": inner_configs.embed_dir,
-    }
+#     # create graph obs
+#     GRAPH_OBS_TOKEN = {
+#         "embed_opt": inner_configs.embed_opt,
+#         "embed_dir": inner_configs.embed_dir,
+#     }
 
-    # set model defaults
-    CUSTOM_DEFAULTS = {
-        "custom_model": custom_model,
-        # Extra kwargs to be passed to your model"s c"tor.
-        "custom_model_config": {
-            "map": setup_env.map,
-            "nred": outer_configs["n_red"],
-            "nblue": outer_configs["n_blue"],
-            "aggregation_fn": inner_configs.aggregation_fn,
-            "hidden_size": inner_configs.hidden_size,
-            "is_hybrid": inner_configs.is_hybrid,
-            "conv_type": inner_configs.conv_type,
-            "layernorm": inner_configs.layernorm,
-            "graph_obs_token": GRAPH_OBS_TOKEN,
-        },
-    }
-    init_trainer_config = {
-        "env": env,
-        "env_config": {**outer_configs},
-        # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
-        "num_gpus": torch.cuda.device_count(),  # int(os.environ.get("RLLIB_NUM_GPUS", "0")),
-        "model": CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS,
-        "num_workers": 1,  # parallelism
-        "framework": "torch",
-        "evaluation_interval": 1,
-        "evaluation_num_episodes": 7,  # 10,
-        "evaluation_num_workers": 1,
-        "evaluation_config": {
-            "env_config": {**outer_configs, "in_eval": True},
-        },
-        "rollout_fragment_length": 100,  # 50 for a2c, 200 for everyone else?
-        "train_batch_size": 200,
-        "log_level": "ERROR",
-        "seed": SEED,
-    }
+#     # set model defaults
+#     CUSTOM_DEFAULTS = {
+#         "custom_model": custom_model,
+#         # Extra kwargs to be passed to your model"s c"tor.
+#         "custom_model_config": {
+#             "map": setup_env.map,
+#             "nred": outer_configs["n_red"],
+#             "nblue": outer_configs["n_blue"],
+#             "aggregation_fn": inner_configs.aggregation_fn,
+#             "hidden_size": inner_configs.hidden_size,
+#             "is_hybrid": inner_configs.is_hybrid,
+#             "conv_type": inner_configs.conv_type,
+#             "layernorm": inner_configs.layernorm,
+#             "graph_obs_token": GRAPH_OBS_TOKEN,
+#         },
+#     }
+#     init_trainer_config = {
+#         "env": env,
+#         "env_config": {**outer_configs},
+#         # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
+#         "num_gpus": torch.cuda.device_count(),  # int(os.environ.get("RLLIB_NUM_GPUS", "0")),
+#         "model": CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS,
+#         "num_workers": 1,  # parallelism
+#         "framework": "torch",
+#         "evaluation_interval": 1,
+#         "evaluation_num_episodes": 7,  # 10,
+#         "evaluation_num_workers": 1,
+#         "evaluation_config": {
+#             "env_config": {**outer_configs, "in_eval": True},
+#         },
+#         "rollout_fragment_length": 100,  # 50 for a2c, 200 for everyone else?
+#         "train_batch_size": 200,
+#         "log_level": "ERROR",
+#         "seed": SEED,
+#     }
 
-    # initialize specific trainer type config
-    trainer_type_config = {}
-    trainer_type_config = trainer_type.DEFAULT_CONFIG.copy()
-    trainer_type_config.update(init_trainer_config)
-    # TODO tune lr with scheduler?
-    trainer_type_config["lr"] = inner_configs.lr  # 1e-3
+#     # initialize specific trainer type config
+#     trainer_type_config = {}
+#     trainer_type_config = trainer_type.DEFAULT_CONFIG.copy()
+#     trainer_type_config.update(init_trainer_config)
+#     # TODO tune lr with scheduler?
+#     trainer_type_config["lr"] = inner_configs.lr  # 1e-3
 
-    # merge init config and trainer-specific config and return
-    trainer_config = {**init_trainer_config, **trainer_type_config}
-    return trainer_config
+#     # merge init config and trainer-specific config and return
+#     trainer_config = {**init_trainer_config, **trainer_type_config}
+#     return trainer_config
 
 # run baseline tests with a few different algorithms
 def train(
@@ -208,43 +213,58 @@ def train(
     checkpoint_models=True,
     custom_model="graph_transformer_policy",
 ):
-    num_red = config['custom_model_config']['nred']
     # get env config/setting seeds
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
     #outer_configs, _ = create_env_config(config)
     gflowfigure8 = GlowFigure8Squad(sampler_config=config)
-    # ???
-    optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=1e5)
+    # TODO double check ???
+    # old lr=1e5
+    optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=1e7)
     num_epochs = 1
-    for _ in range(num_epochs):
+    batch_loss = 0
+    batch_num = 0
+    batch_reward = 0
+
+    for i in range(num_epochs):
         trajectory = Trajectory()
         gflowfigure8._reset_agents()
         for i in range(20):
             optimizer.zero_grad()
-            step = gflowfigure8.step()
-            if step['done']:
-                continue
-            # TODO: multiple agents
-            print(f"step rewards {step['step_reward']}")
-            trajectory.add_step(
-                forward_prob=step['forward_prob'],
-                backward_prob=step['backward_prob'],
-                flow=step['flow'],
-                action=step['action'],
-                reward=step['step_reward']
-            )
-            # TODO: multiple agents
+            for a_id in range(config['custom_model_config']['nred']):
+                step = gflowfigure8.step(a_id)
+                if step['done']:
+                    continue
+                trajectory.add_step(
+                    forward_prob=step['forward_prob'],
+                    backward_prob=step['backward_prob'],
+                    flow=step['flow'],
+                    action=step['action'],
+                    reward=step['step_reward'],
+                    node=step['node']
+                )
 
-        reward = [gflowfigure8._episode_rewards()[0]]
-        trajectory.episode_reward(reward)
+            # reward = [gflowfigure8._episode_rewards()[a_id]]
+            # trajectory.episode_reward_test(reward)
+        reward = gflowfigure8._episode_rewards_test(trajectory)
+        # if reward > 0:
+        #     print(trajectory.nodes)
 
-        loss = losses.Losses.trajectory_balance(trajectory)
-        if WANDB:
-            wandb.log({"loss": loss, "reward": reward})
+        batch_reward += reward
 
-        loss.backward()
+        batch_num = batch_num + 1
+        episode_loss = losses.Losses.trajectory_balance(trajectory)
+        batch_loss += episode_loss
+
+        batch_size = 150
+        if batch_num % batch_size == 0:
+            if WANDB:
+                wandb.log({"loss": batch_loss/batch_size, "reward": batch_reward/batch_size})
+                batch_loss = 0
+                batch_reward = 0
+
+        episode_loss.backward()
         optimizer.step()
 
 

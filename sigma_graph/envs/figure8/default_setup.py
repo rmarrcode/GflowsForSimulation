@@ -16,7 +16,7 @@ INIT_AGENT_BLUE = {"learn": False, "route": "0", "idx": 0}
 INIT_CONFIGS = {
     "env_path": './', "map_id": 'S', "load_pickle": True,
     "init_red": None, "init_blue": None, "init_health_red": 10, "init_health_blue": 100, "damage_maximum": 5,
-    "fixed_start": -1
+    "fixed_start": 5
 }
 INIT_CONFIGS_LOCAL = ["threshold_damage_2_red", "threshold_damage_2_blue", "act_masked", "penalty_stay"]
 

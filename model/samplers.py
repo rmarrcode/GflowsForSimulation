@@ -172,6 +172,7 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         obs,
     ):
         x = utils.efficient_embed_obs_in_map(obs, self.map, self.obs_shapes)
+        
         agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
         
         # inference
