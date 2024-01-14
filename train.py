@@ -31,7 +31,7 @@ from trajectory import Trajectory
 import losses
 import torch.optim as optim
 
-WANDB = False
+WANDB = True
 SEED = 0
 
 if WANDB:
@@ -222,7 +222,7 @@ def train(
     # TODO double check ???
     # old lr=1e5
     optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=1e7)
-    num_epochs = 1
+    num_epochs = 100000
     batch_loss = 0
     batch_num = 0
     batch_reward = 0

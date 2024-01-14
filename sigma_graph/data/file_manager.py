@@ -12,9 +12,10 @@ MAP_LOOKUP = {
     "L": "_73",
 }
 
+# TODO maybe change because I updated project root
 PATH_LOOKUP = {
-    "saved": "sigma_graph/data/parsed/",
-    "raw": "sigma_graph/data/raw/",
+    "saved": "GflowsForSimulation/sigma_graph/data/parsed/",
+    "raw": "GflowsForSimulation/sigma_graph/data/raw/",
 }
 
 # assign a large int for no connectivity to replace "null" in graph generation pipeline

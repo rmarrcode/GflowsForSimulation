@@ -59,6 +59,7 @@ MOVE_DEGS = {
     "move_2deg_away": None,
     "move_3deg_away": None,
 }
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -195,8 +196,13 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
         if GRAPH_OBS_TOKEN["embed_dir"]:
             blue_i = 0
             for blue_position in blue_positions: #HERE
-                start_idx_for_dir_i = len(blue_obs)-1-4*(blue_i+1)
-                end_idx_for_dir_i = len(blue_obs)-1-4*blue_i
+                # pretty sure this is a bug
+                # start_idx_for_dir_i = len(blue_obs)-1-4*(blue_i+1)
+                start_idx_for_dir_i = len(blue_obs)-4*(blue_i+1)
+
+                # pretty sure this is a bug 
+                # end_idx_for_dir_i = len(blue_obs)-1-4*blue_i
+                end_idx_for_dir_i = len(blue_obs)-4*blue_i
                 dir_i = blue_obs[start_idx_for_dir_i:end_idx_for_dir_i]
                 blue_dir = get_loc(dir_i, 4) + 1 # direction as defined by action_lookup.py
                 blue_dir_behind = action_lookup.TURN_L[action_lookup.TURN_L[blue_dir]] # 2 left turns = 180deg turn

@@ -77,12 +77,7 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
             self.num_red,
             self.num_blue,
         ]
-        self.adjacency = []
-        for n in map.g_acs.adj:
-            ms = map.g_acs.adj[n]
-            for m in ms:
-                self.adjacency.append([n-1, m-1])
-        self.adjacency = torch.LongTensor(self.adjacency).t().contiguous()
+        
         self._features = None  # current "base" output before logits
         self._last_flat_in = None  # last input
 
@@ -161,6 +156,14 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
+        self.adjacency = []
+        for n in map.g_acs.adj:
+            ms = map.g_acs.adj[n]
+            for m in ms:
+                self.adjacency.append([n-1, m-1])
+        self.adjacency = torch.LongTensor(self.adjacency).t().contiguous()
+        self.adjacency = self.adjacency.to(self.device)
+
         self.to(self.device)
 
     def convert_discrete_action_to_multidiscrete(self, action):
@@ -198,6 +201,7 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         self,
         obs,
     ):
+        
         x = utils.efficient_embed_obs_in_map(obs, self.map, self.obs_shapes)
         agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
         

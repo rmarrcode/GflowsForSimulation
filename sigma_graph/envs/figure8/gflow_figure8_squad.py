@@ -21,6 +21,8 @@ import torch.nn as nn
 local_action_move = env_setup.act.MOVE_LOOKUP
 local_action_turn = env_setup.act.TURN_90_LOOKUP
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class GlowFigure8Squad():
     def __init__(self, sampler_config, max_step=40, n_red=1, n_blue=1):#, **kwargs):
         # setup configs
@@ -129,11 +131,10 @@ class GlowFigure8Squad():
         # self._update()
         R_engage_B, B_engage_R, R_overlay = self._update()
 
-        # states is obs
         prev_obs = [self.states[a_id],]
-        (forward_prob, action) = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8)))
-        (backward_prob, _) = self.sampler.backward(torch.tensor(np.array(self.states, dtype=np.int8)))
-        flow = self.sampler.flow(torch.tensor(np.array(self.states, dtype=np.int8)))
+        (forward_prob, action) = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        (backward_prob, _) = self.sampler.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        flow = self.sampler.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
 
         action_penalty_red = self._take_action_red(action)
         self._take_action_blue()
