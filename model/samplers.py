@@ -175,7 +175,6 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         obs,
     ):
         x = utils.efficient_embed_obs_in_map(obs, self.map, self.obs_shapes)
-        
         agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
         
         # inference
@@ -190,11 +189,11 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         # what does this do
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
 
-        logits = torch.nn.functional.softmax(probs, dim=1)
+        logits = torch.nn.functional.log_softmax(probs, dim=1)
         dist = Categorical(logits)
         sample = dist.sample().tolist()[0]
         action = [self.convert_discrete_action_to_multidiscrete(sample)]
-        
+        print(f'action {action}')
         return (logits[0][sample], action)
     
     def backward(
@@ -217,7 +216,7 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         # what does this do
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
 
-        logits = torch.nn.functional.softmax(probs, dim=1)
+        logits = torch.nn.functional.log_softmax(probs, dim=1)
         dist = Categorical(logits)
         sample = dist.sample().tolist()[0]
         action = [self.convert_discrete_action_to_multidiscrete(sample)]

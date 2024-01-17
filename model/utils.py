@@ -35,7 +35,7 @@ GRAPH_OBS_TOKEN = {
     "embedding_size": 5,#7, #10
     "obs_embed": True,
     "embed_pos": False,
-    "embed_dir": True,
+    "embed_dir": False,
     "embed_opt": True,
 }
 NODE_EMBED_SIZE = (

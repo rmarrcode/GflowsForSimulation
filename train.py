@@ -230,8 +230,7 @@ def train(
     for i in range(num_epochs):
         trajectory = Trajectory()
         gflowfigure8._reset_agents()
-        for i in range(20):
-            optimizer.zero_grad()
+        for i in range(20):   
             for a_id in range(config['custom_model_config']['nred']):
                 step = gflowfigure8.step(a_id)
                 if step['done']:
@@ -256,6 +255,8 @@ def train(
         batch_num = batch_num + 1
         episode_loss = losses.Losses.trajectory_balance(trajectory)
         batch_loss += episode_loss
+
+        optimizer.zero_grad()
 
         batch_size = 150
         if batch_num % batch_size == 0:
