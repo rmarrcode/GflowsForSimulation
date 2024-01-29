@@ -74,8 +74,8 @@ def generate_picture(env_dir, log_dir, log_file, HP_red, TR_red, HP_blue, TR_blu
     lines = file.readlines()
 
     # predetermined colors
-    col_map_red = ['#000000', '#200000', '#400000', '#800000', '#BF0000', '#FF0000']
-    col_map_blue = ['#000000', '#000020', '#000040', '#000080', '#0000BF', '#0000FF']
+    col_map_red = ['#200000', '#200000', '#400000', '#800000', '#BF0000', '#FF0000']
+    col_map_blue = ['#000020', '#000020', '#000040', '#000080', '#0000BF', '#0000FF']
     if color_decay:
         HP_offset = 0.1
         red_bds = np.append([0], np.linspace(HP_red - TR_red + HP_offset, HP_red + HP_offset, num=len(col_map_red)))
@@ -109,10 +109,10 @@ def generate_picture(env_dir, log_dir, log_file, HP_red, TR_red, HP_blue, TR_blu
             legend_text += ["{}_{} HP:{} node:{} dir:{} pos:{}".format(agent["team"], agent["id"], agent["HP"],
                                                                        agent["node"], agent["dir"], agent["pos"])]
             if agent["team"] == 'red':
-                col_map[agent['node'] - 1] = col_map_red[red_norm(agent['HP'])]
+                col_map[agent['node'] - 1] = "red" #col_map_red[red_norm(agent['HP'])]
             elif agent["team"] == 'blue':
                 blue_health = agent['HP']
-                col_map[agent['node'] - 1] = col_map_blue[blue_norm(blue_health)]
+                col_map[agent['node'] - 1] = "blue" #col_map_blue[blue_norm(blue_health)]
         # set pause frame number for gif looping
         if if_froze and (not pause_step) and (blue_health <= HP_blue - TR_blue):
             pause_step = i

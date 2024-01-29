@@ -189,11 +189,13 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         # what does this do
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
 
+        # TODO: revisit this 
+        # How does decision work??? What needs to be done
         logits = torch.nn.functional.log_softmax(probs, dim=1)
         dist = Categorical(logits)
         sample = dist.sample().tolist()[0]
         action = [self.convert_discrete_action_to_multidiscrete(sample)]
-        print(f'action {action}')
+        
         return (logits[0][sample], action)
     
     def backward(
@@ -240,6 +242,77 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         prob = self._logits_flow(self._features_flow).log()
         
         return prob
+    
+class SamplerFCN(nn.Module):
+    def __init__(
+        self,
+        self_size,
+        num_hiddens,
+        num_outputs
+    ):
+        self.self_size = self_size
+        self.num_hiddens = num_hiddens
+        self.num_outputs = num_outputs
+
+        nn.Module.__init__(self)
+
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+
+        self.mlp_forward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float),
+                                 nn.LeakyReLU(),
+                                 nn.Linear(num_hiddens, num_outputs, dtype=float))
+        self.mlp_backward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float), 
+                                 nn.LeakyReLU(),
+                                 nn.Linear(num_hiddens, num_outputs, dtype=float))
+
+        self.to(self.device)
+
+    def convert_discrete_action_to_multidiscrete(self, action):
+        return [action % len(local_action_move), action // len(local_action_move)]
+
+    def forward(
+        self,
+        obs,
+    ):
+        self_size = self.self_size
+        self_obs = obs[0][:self_size].double()
+        features = self.mlp_forward(self_obs)
+        # double check activation
+        probs = torch.nn.functional.softmax(features, dim=0)
+        sample = Categorical(probs).sample()
+
+        action = self.convert_discrete_action_to_multidiscrete(sample)
+        action[0] = action[0].cpu().tolist()
+        action[1] = action[1].cpu().tolist()
+
+        return (probs[sample], [action])
+    
+    def backward(
+        self,
+        obs,
+    ):
+        
+        self_size = self.self_size
+        self_obs = obs[0][:self_size].double()
+        features = self.mlp_backward(self_obs)
+        # double check activation
+        probs = torch.nn.functional.softmax(features, dim=0)
+        sample = Categorical(probs).sample()
+        
+        # good idea to keep moving it
+        action = self.convert_discrete_action_to_multidiscrete(sample)
+        action[0] = action[0].cpu().tolist()
+        action[1] = action[1].cpu().tolist()
+
+        return (probs[sample], [action])
+    
+    def flow(
+        self,
+        obs,
+    ):
+        return 0
     
 
 

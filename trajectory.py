@@ -2,14 +2,13 @@ import torch
 
 class Trajectory():
     def __init__(self) -> None:
-        self.log_norm_constant = 1
+        self.log_norm_constant = 100
         self.forward_probs = torch.tensor([], requires_grad=True)
         self.backward_probs = torch.tensor([], requires_grad=True)
         self.flows = torch.tensor([], requires_grad=True)
         self.actions = torch.tensor([], requires_grad=True)
         self.rewards = torch.tensor([], requires_grad=True)
         self.nodes = torch.tensor([], requires_grad=True)
-        self.log_norm_constant = 1
     def add_step(self, forward_prob, backward_prob, flow, action, reward, node):
         self.forward_probs = torch.cat((self.forward_probs, torch.tensor([forward_prob]))) 
         self.backward_probs = torch.cat((self.backward_probs, torch.tensor([backward_prob]))) 

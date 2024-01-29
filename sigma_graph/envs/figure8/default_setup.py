@@ -11,11 +11,11 @@ ACT_MASKED = {
     "unmasked_invalid_action_penalty": -10,
 }
 
-INIT_AGENT_RED = {"learn": True, "pos": None, "dir": None}
+INIT_AGENT_RED = {"learn": True, "pos": 25, "dir": None}
 INIT_AGENT_BLUE = {"learn": False, "route": "0", "idx": 0}
 INIT_CONFIGS = {
     "env_path": './', "map_id": 'S', "load_pickle": True,
-    "init_red": None, "init_blue": None, "init_health_red": 10, "init_health_blue": 100, "damage_maximum": 5,
+    "init_red": INIT_AGENT_RED, "init_blue": None, "init_health_red": 10, "init_health_blue": 100, "damage_maximum": 5,
     "fixed_start": 5
 }
 INIT_CONFIGS_LOCAL = ["threshold_damage_2_red", "threshold_damage_2_blue", "act_masked", "penalty_stay"]

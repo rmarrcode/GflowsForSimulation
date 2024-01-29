@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 
-from  model.samplers import Sampler
+from  model.samplers import Sampler, SamplerFCN
 
 from sigma_graph.data.file_manager import load_graph_files, save_log_2_file, log_done_reward
 from sigma_graph.data.graph.skirmish_graph import MapInfo
@@ -82,7 +82,13 @@ class GlowFigure8Squad():
             hidden_size=sampler_config['custom_model_config']['hidden_size'],
             is_hybrid=sampler_config['custom_model_config']['is_hybrid'],
             conv_type=sampler_config['custom_model_config']['conv_type'],
-            layernorm=sampler_config['custom_model_config']['layernorm']
+            layernorm=sampler_config['custom_model_config']['layernorm'],
+            activation=torch.nn.functional.log_softmax
+        )
+        self.sampler_fcn = SamplerFCN(
+            self_size=27,
+            num_hiddens=512,
+            num_outputs=15
         )
 
     def reset(self, force=False):
@@ -131,10 +137,13 @@ class GlowFigure8Squad():
         # self._update()
         R_engage_B, B_engage_R, R_overlay = self._update()
 
-        prev_obs = [self.states[a_id],]
-        (forward_prob, action) = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
-        (backward_prob, _) = self.sampler.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
-        flow = self.sampler.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        # prev_obs = [self.states[a_id],]
+        (forward_prob, action) = self.sampler_fcn.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        (backward_prob, _) = self.sampler_fcn.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        flow = self.sampler_fcn.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+
+        # update log
+        self._log_step_update(prev_obs, [action,], [0,])
 
         action_penalty_red = self._take_action_red(action)
         self._take_action_blue()
@@ -146,7 +155,6 @@ class GlowFigure8Squad():
         step_reward = self._step_reward_test()
         n_done = self._get_step_done()
 
-        self._log_step_update(prev_obs, [action,], [step_reward,])
 
         return ({
             'done': False,
@@ -385,7 +393,7 @@ class GlowFigure8Squad():
         return rewards
     
     def _step_reward_test(self):
-        reward = 0
+        reward = 1
         for red_i in range(self.num_red):
             if self.team_red[red_i].get_info()["node"] == 10:
                 reward += 10
@@ -578,7 +586,8 @@ class GlowFigure8Squad():
         for idx, init_red in enumerate(self.configs["init_red"]):
             r_eval_start_pos = self.n_eval_episodes if self.in_eval else None
             r_code = env_setup.get_default_red_encoding(idx, init_red["pos"], r_eval_start_pos)
-            r_node = self.map.get_index_by_name(r_code)
+            # why is this so complicated???
+            r_node = 25 # self.map.get_index_by_name(r_code)
             r_dir = env_setup.get_default_dir(init_red["dir"])
             self.team_red[idx].reset(_node=r_node, _code=r_code, _dir=r_dir, _health=HP_red)
 
@@ -601,6 +610,9 @@ class GlowFigure8Squad():
         return self.states if self.logger else []
 
     def _log_step_update(self, prev_obs, actions, rewards):
+        # not really sure why this is called when it is
+        # using current team positions so this should be called before action to get first action
+        # but if called before first action we dont have reward        
         if self.logger is True:
             _r = [[f"red:{_agent.get_id()}", _agent.get_pos_dir(), _agent.get_encoding(), _agent.get_health()]
                   for _agent in self.team_red]
