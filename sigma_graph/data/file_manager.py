@@ -52,6 +52,11 @@ def load_graph_files(env_path="./", map_lookup="S", route_lookup=["0"], is_pickl
     assert check_dir(env_path), "[GymEnv][Error] Invalid path for loading env data: \'{}\'".format(env_path)
 
     path_data = os.path.join(env_path, PATH_LOOKUP["saved"])
+    #just temporary I know this is bad
+    print('--------------------')
+    print(path_data)
+    path_data = './sigma_graph/data/parsed/'
+    print(os.getcwd())
     assert check_dir(path_data), "[GymEnv][Error] Can not find data in: \'{}\'".format(path_data)
 
     map_id = MAP_LOOKUP[map_lookup]

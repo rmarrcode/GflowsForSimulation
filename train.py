@@ -31,9 +31,9 @@ from trajectory import Trajectory
 import losses
 import torch.optim as optim
 
-WANDB = False
+WANDB = True
 SEED = 0
-LEARNING_RATE = 1e-7
+LEARNING_RATE = 1e-3
 
 if WANDB:
     wandb.init(
@@ -218,69 +218,52 @@ def train(
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
-    #outer_configs, _ = create_env_config(config)
+
     gflowfigure8 = GlowFigure8Squad(sampler_config=config)
-    # TODO double check ???
-    # old lr=1e5
+
     optimizer = optim.AdamW(gflowfigure8.sampler_fcn.parameters(), lr=LEARNING_RATE)
     num_epochs = 100000
     batch_loss = 0
     batch_num = 0
     batch_reward = 0
 
-    for i in range(num_epochs):
+    for _ in range(num_epochs):
         trajectory = Trajectory()
         gflowfigure8._reset_agents()
-        for i in range(20):   
+        
+        steps_in_trajectory = 20
+        for _ in range(steps_in_trajectory):   
             for a_id in range(config['custom_model_config']['nred']):
                 step = gflowfigure8.step(a_id)
-                if step['done']:
-                    continue
-                # add forward prob on terminating step?
-                if i == 0:
-                    trajectory.add_step(
+                trajectory.add_step(
                     forward_prob=step['forward_prob'],
-                    backward_prob=1,
-                    flow=step['flow'],
-                    action=step['action'],
-                    reward=step['step_reward'],
-                    node=step['node'])
-                if i == 19:
-                    trajectory.add_step(
-                    forward_prob=1,
                     backward_prob=step['backward_prob'],
-                    flow=step['flow'],
-                    action=step['action'],
+                    # flow=step['flow'],
+                    # action=step['action'],
                     reward=step['step_reward'],
-                    node=step['node'])
-                else: 
-                    trajectory.add_step(
-                        forward_prob=step['forward_prob'],
-                        backward_prob=step['backward_prob'],
-                        flow=step['flow'],
-                        action=step['action'],
-                        reward=step['step_reward'],
-                        node=step['node']
-                    )
+                    # node=step['node']
+                )
 
-            # reward = [gflowfigure8._episode_rewards()[a_id]]
-            # trajectory.episode_reward_test(reward)
-        reward = gflowfigure8._episode_rewards_test(trajectory)
-        # if reward > 0:
-        #     print(trajectory.nodes)
+        # This works to update the gradient
+        # episode_loss = losses.Losses.step_test(step) 
 
-        batch_reward += reward
+        # This does not
+        
+        episode_loss = losses.Losses.trajectory_balance(trajectory)
+        episode_reward = trajectory.rewards
 
         batch_num = batch_num + 1
-        episode_loss = losses.Losses.trajectory_balance(trajectory)
         batch_loss += episode_loss
+        batch_reward += episode_reward
 
         batch_size = 150
         if batch_num % batch_size == 0:
             if WANDB:
-                wandb.log({"loss": batch_loss/batch_size, "reward": batch_reward/batch_size})
+                wandb.log({"loss": batch_loss/batch_size, "reward":  batch_reward/batch_size})
                 batch_loss = 0
                 batch_reward = 0
+                for name, param in gflowfigure8.sampler_fcn.named_parameters():
+                    wandb.log({f"{name}_mean": param.data.mean().item(), f"{name}_std": param.data.std().item()})
 
         episode_loss.backward()
         optimizer.step()

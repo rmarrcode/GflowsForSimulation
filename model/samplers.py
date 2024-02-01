@@ -243,6 +243,7 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         
         return prob
     
+    
 class SamplerFCN(nn.Module):
     def __init__(
         self,
@@ -315,4 +316,15 @@ class SamplerFCN(nn.Module):
         return 0
     
 
+class SimpleNetwork(nn.Module):
+    def __init__(self):
+        super(SimpleNetwork, self).__init__()
+        self.linear1 = nn.Linear(27, 512)
+        self.relu = nn.ReLU()
+        self.linear2 = nn.Linear(512, 1)
 
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.relu(x)
+        x = self.linear2(x)
+        return x
