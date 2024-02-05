@@ -282,13 +282,13 @@ class SamplerFCN(nn.Module):
         features = self.mlp_forward(self_obs)
         # double check activation
         probs = torch.nn.functional.softmax(features, dim=0)
-        sample = Categorical(probs).sample()
 
-        action = self.convert_discrete_action_to_multidiscrete(sample)
-        action[0] = action[0].cpu().tolist()
-        action[1] = action[1].cpu().tolist()
+        # sample = Categorical(probs).sample()
+        # action = self.convert_discrete_action_to_multidiscrete(sample)
+        # action[0] = action[0].cpu().tolist()
+        # action[1] = action[1].cpu().tolist()
 
-        return (probs[sample], [action])
+        return probs
     
     def backward(
         self,
@@ -300,14 +300,14 @@ class SamplerFCN(nn.Module):
         features = self.mlp_backward(self_obs)
         # double check activation
         probs = torch.nn.functional.softmax(features, dim=0)
-        sample = Categorical(probs).sample()
-        
-        # good idea to keep moving it
-        action = self.convert_discrete_action_to_multidiscrete(sample)
-        action[0] = action[0].cpu().tolist()
-        action[1] = action[1].cpu().tolist()
 
-        return (probs[sample], [action])
+        # sample = Categorical(probs).sample()
+        # # good idea to keep moving it
+        # action = self.convert_discrete_action_to_multidiscrete(sample)
+        # action[0] = action[0].cpu().tolist()
+        # action[1] = action[1].cpu().tolist()
+
+        return probs
     
     def flow(
         self,

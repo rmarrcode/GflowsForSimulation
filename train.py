@@ -24,14 +24,14 @@ from sigma_graph.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
 from sigma_graph.envs.figure8.gflow_figure8_squad import GlowFigure8Squad
 #from graph_scout.envs.base import ScoutMissionStdRLLib
 import sigma_graph.envs.figure8.default_setup as default_setup
-#import model  # THIS NEEDS TO BE HERE IN ORDER TO RUN __init__.py!
-#import model.utils as utils
+import model  # THIS NEEDS TO BE HERE IN ORDER TO RUN __init__.py!
+import model.utils as utils
 import model.gnn_gflow 
 from trajectory import Trajectory
 import losses
 import torch.optim as optim
 
-WANDB = True
+WANDB = False
 SEED = 0
 LEARNING_RATE = 1e-3
 
@@ -133,80 +133,7 @@ def create_gflow_config(
     return CUSTOM_DEFAULTS
     
 
-# # create trainer configuration
-# def create_trainer_config(
-#     outer_configs, inner_configs, trainer_type=None, custom_model=""
-# ):
-#     # check params
-#     trainer_types = [dqn, pg, a3c, ppo]
-#     assert trainer_type != None, f"trainer_type must be one of {trainer_types}"
 
-#     # initialize env and required config settings
-#     env = GlowFigure8Squad
-#     setup_env = env(outer_configs)
-#     # obs_space = setup_env.observation_space
-#     # act_space = setup_env.action_space
-#     # policies = {}
-#     # for agent_id in setup_env.learning_agent:
-#     #    policies[str(agent_id)] = (None, obs_space, act_space, {})
-#     # policy mapping function not currently used.
-#     # def policy_mapping_fn(agent_id, episode, worker, **kwargs):
-#     #    return str(agent_id)
-
-#     # create graph obs
-#     GRAPH_OBS_TOKEN = {
-#         "embed_opt": inner_configs.embed_opt,
-#         "embed_dir": inner_configs.embed_dir,
-#     }
-
-#     # set model defaults
-#     CUSTOM_DEFAULTS = {
-#         "custom_model": custom_model,
-#         # Extra kwargs to be passed to your model"s c"tor.
-#         "custom_model_config": {
-#             "map": setup_env.map,
-#             "nred": outer_configs["n_red"],
-#             "nblue": outer_configs["n_blue"],
-#             "aggregation_fn": inner_configs.aggregation_fn,
-#             "hidden_size": inner_configs.hidden_size,
-#             "is_hybrid": inner_configs.is_hybrid,
-#             "conv_type": inner_configs.conv_type,
-#             "layernorm": inner_configs.layernorm,
-#             "graph_obs_token": GRAPH_OBS_TOKEN,
-#         },
-#     }
-#     init_trainer_config = {
-#         "env": env,
-#         "env_config": {**outer_configs},
-#         # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
-#         "num_gpus": torch.cuda.device_count(),  # int(os.environ.get("RLLIB_NUM_GPUS", "0")),
-#         "model": CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS,
-#         "num_workers": 1,  # parallelism
-#         "framework": "torch",
-#         "evaluation_interval": 1,
-#         "evaluation_num_episodes": 7,  # 10,
-#         "evaluation_num_workers": 1,
-#         "evaluation_config": {
-#             "env_config": {**outer_configs, "in_eval": True},
-#         },
-#         "rollout_fragment_length": 100,  # 50 for a2c, 200 for everyone else?
-#         "train_batch_size": 200,
-#         "log_level": "ERROR",
-#         "seed": SEED,
-#     }
-
-#     # initialize specific trainer type config
-#     trainer_type_config = {}
-#     trainer_type_config = trainer_type.DEFAULT_CONFIG.copy()
-#     trainer_type_config.update(init_trainer_config)
-#     # TODO tune lr with scheduler?
-#     trainer_type_config["lr"] = inner_configs.lr  # 1e-3
-
-#     # merge init config and trainer-specific config and return
-#     trainer_config = {**init_trainer_config, **trainer_type_config}
-#     return trainer_config
-
-# run baseline tests with a few different algorithms
 def train(
     config,
     run_default_baseline_metrics=False,
@@ -221,8 +148,8 @@ def train(
 
     gflowfigure8 = GlowFigure8Squad(sampler_config=config)
 
-    optimizer = optim.AdamW(gflowfigure8.sampler_fcn.parameters(), lr=LEARNING_RATE)
-    num_epochs = 100000
+    optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=LEARNING_RATE)
+    num_epochs = 150000
     batch_loss = 0
     batch_num = 0
     batch_reward = 0

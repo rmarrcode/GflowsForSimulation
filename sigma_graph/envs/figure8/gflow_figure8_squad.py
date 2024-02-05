@@ -18,6 +18,8 @@ from gym import spaces
 import torch
 import torch.nn as nn
 
+from torch.distributions import Categorical
+
 local_action_move = env_setup.act.MOVE_LOOKUP
 local_action_turn = env_setup.act.TURN_90_LOOKUP
 
@@ -68,23 +70,23 @@ class GlowFigure8Squad():
                                                     for _ in range(len(self.learning_agent))])
         self.obs = [[] for _ in range(len(self.learning_agent))]
         self.states = [[] for _ in range(len(self.learning_agent))]
-        # self.sampler = Sampler(
-        #     obs_space=self.__observation_space,
-        #     action_space=self.__action_space,
-        #     num_outputs=15,
-        #     model_config={},
-        #     name='str',
-        #     map=self.map,
-        #     # graph_obs_token=sampler_config['custom_model_config']['graph_obs_token'],
-        #     nred=sampler_config['custom_model_config']['nred'],
-        #     nblue=sampler_config['custom_model_config']['nblue'],
-        #     aggregation_fn=sampler_config['custom_model_config']['aggregation_fn'],
-        #     hidden_size=sampler_config['custom_model_config']['hidden_size'],
-        #     is_hybrid=sampler_config['custom_model_config']['is_hybrid'],
-        #     conv_type=sampler_config['custom_model_config']['conv_type'],
-        #     layernorm=sampler_config['custom_model_config']['layernorm'],
-        #     activation=torch.nn.functional.log_softmax
-        # )
+        self.sampler = Sampler(
+            obs_space=self.__observation_space,
+            action_space=self.__action_space,
+            num_outputs=15,
+            model_config={},
+            name='str',
+            map=self.map,
+            graph_obs_token=sampler_config['custom_model_config']['graph_obs_token'],
+            nred=sampler_config['custom_model_config']['nred'],
+            nblue=sampler_config['custom_model_config']['nblue'],
+            aggregation_fn=sampler_config['custom_model_config']['aggregation_fn'],
+            hidden_size=sampler_config['custom_model_config']['hidden_size'],
+            is_hybrid=sampler_config['custom_model_config']['is_hybrid'],
+            conv_type=sampler_config['custom_model_config']['conv_type'],
+            layernorm=sampler_config['custom_model_config']['layernorm'],
+            activation=torch.nn.functional.log_softmax
+        )
         self.sampler_fcn = SamplerFCN(
             self_size=27,
             num_hiddens=512,
@@ -114,6 +116,16 @@ class GlowFigure8Squad():
         # done for each Red agent
         return [self.team_red[_r].get_health() <= 0 for _r in range(self.num_red)]
 
+    def convert_discrete_action_to_multidiscrete(self, action):
+        return [action % len(local_action_move), action // len(local_action_move)]
+
+    def probs_to_action(self, probs):
+        sample = Categorical(probs).sample()
+        action = self.convert_discrete_action_to_multidiscrete(sample)
+        action[0] = action[0].cpu().tolist()
+        action[1] = action[1].cpu().tolist()
+        return (probs[sample], [action])
+
     # use observation from state var
     # make actions
     # update state 
@@ -138,8 +150,10 @@ class GlowFigure8Squad():
         R_engage_B, B_engage_R, R_overlay = self._update()
 
         # prev_obs = [self.states[a_id],]
-        (forward_prob, action) = self.sampler_fcn.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
-        (backward_prob, _) = self.sampler_fcn.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        probs_forward = self.sampler_fcn.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        (forward_prob, action) = self.probs_to_action(probs_forward)
+        probs_backward = self.sampler_fcn.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        (backward_prob, _) = self.probs_to_action(probs_backward)
         flow = self.sampler_fcn.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
 
         # update log
