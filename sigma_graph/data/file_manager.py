@@ -36,8 +36,15 @@ VISIBILITY_IS_360 = False
 
 
 # lookup table for data types: prefixes of parsed data files for saving and loading
+# DATA_LOOKUP = {
+#     "connectivity": "graph_acs",
+#     "visibility": "graph_vis_360" if VISIBILITY_IS_360 else "graph_vis",
+#     "encoding": "info_dict_emb",
+#     "position": "info_dict_pos",
+#     "patrol_route": "info_list_pat"
+# }
 DATA_LOOKUP = {
-    "connectivity": "graph_acs",
+    "connectivity": "info_dict_emb",
     "visibility": "graph_vis_360" if VISIBILITY_IS_360 else "graph_vis",
     "encoding": "info_dict_emb",
     "position": "info_dict_pos",
