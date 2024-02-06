@@ -36,20 +36,20 @@ VISIBILITY_IS_360 = False
 
 
 # lookup table for data types: prefixes of parsed data files for saving and loading
-# DATA_LOOKUP = {
-#     "connectivity": "graph_acs",
-#     "visibility": "graph_vis_360" if VISIBILITY_IS_360 else "graph_vis",
-#     "encoding": "info_dict_emb",
-#     "position": "info_dict_pos",
-#     "patrol_route": "info_list_pat"
-# }
 DATA_LOOKUP = {
-    "connectivity": "info_dict_emb",
+    "connectivity": "graph_acs",
     "visibility": "graph_vis_360" if VISIBILITY_IS_360 else "graph_vis",
     "encoding": "info_dict_emb",
     "position": "info_dict_pos",
     "patrol_route": "info_list_pat"
 }
+# DATA_LOOKUP = {
+#     "connectivity": "info_dict_emb",
+#     "visibility": "graph_vis_360" if VISIBILITY_IS_360 else "graph_vis",
+#     "encoding": "info_dict_emb",
+#     "position": "info_dict_pos",
+#     "patrol_route": "info_list_pat"
+# }
 
 def set_visibility(visibility):
     VISIBILITY_IS_360 = visibility;
@@ -64,7 +64,7 @@ def load_graph_files(env_path="./", map_lookup="S", route_lookup=["0"], is_pickl
     print('---------------')
     print(f'path_data {path_data}')
     print(os.getcwd())
-    path_data = '/home/rmarr/Documents/GflowsForSimulation_env/GflowsForSimulation/sigma_graph/data/parsed/'
+    path_data = '/Users/ryanmarr/Documents/CognArch/GflowsForSimulation/sigma_graph/data/parsed/'
     assert check_dir(path_data), "[GymEnv][Error] Can not find data in: \'{}\'".format(path_data)
 
     map_id = MAP_LOOKUP[map_lookup]

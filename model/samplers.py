@@ -267,6 +267,8 @@ class SamplerFCN(nn.Module):
         self.mlp_backward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float), 
                                  nn.LeakyReLU(),
                                  nn.Linear(num_hiddens, num_outputs, dtype=float))
+        
+        self.logZ = nn.Parameter(torch.ones(1))
 
         self.to(self.device)
 
@@ -281,7 +283,7 @@ class SamplerFCN(nn.Module):
         self_obs = obs[0][:self_size].double()
         features = self.mlp_forward(self_obs)
         # double check activation
-        probs = torch.nn.functional.softmax(features, dim=0)
+        probs = torch.nn.functional.log_softmax(features, dim=0)
 
         # sample = Categorical(probs).sample()
         # action = self.convert_discrete_action_to_multidiscrete(sample)
@@ -299,7 +301,7 @@ class SamplerFCN(nn.Module):
         self_obs = obs[0][:self_size].double()
         features = self.mlp_backward(self_obs)
         # double check activation
-        probs = torch.nn.functional.softmax(features, dim=0)
+        probs = torch.nn.functional.log_softmax(features, dim=0)
 
         # sample = Categorical(probs).sample()
         # # good idea to keep moving it

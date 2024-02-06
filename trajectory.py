@@ -19,8 +19,8 @@ class Trajectory():
     #     self.actions = torch.cat((self.actions, torch.tensor([action]))) 
     #     self.rewards = torch.cat((self.rewards, torch.tensor([reward]))) 
     def add_step(self, forward_prob, backward_prob, reward):
-        self.forward_probs = self.forward_probs * forward_prob
-        self.backward_probs = self.backward_probs * backward_prob
+        self.forward_probs = self.forward_probs + forward_prob
+        self.backward_probs = self.backward_probs + backward_prob
         self.rewards = self.rewards + reward
 
     def episode_reward(self, episode_reward):

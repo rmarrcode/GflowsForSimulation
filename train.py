@@ -149,7 +149,7 @@ def train(
     gflowfigure8 = GlowFigure8Squad(sampler_config=config)
 
     optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=LEARNING_RATE)
-    num_epochs = 150000
+    num_epochs = 100000
     batch_loss = 0
     batch_num = 0
     batch_reward = 0
@@ -170,13 +170,12 @@ def train(
                     reward=step['step_reward'],
                     # node=step['node']
                 )
+                print(step['node'])
+                print(step['action'])
 
-        # This works to update the gradient
-        # episode_loss = losses.Losses.step_test(step) 
+        logZ = gflowfigure8.sampler_fcn.logZ
 
-        # This does not
-        
-        episode_loss = losses.Losses.trajectory_balance(trajectory)
+        episode_loss = losses.Losses.trajectory_balance(trajectory, logZ)
         episode_reward = trajectory.rewards
 
         batch_num = batch_num + 1

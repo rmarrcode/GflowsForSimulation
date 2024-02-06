@@ -6,7 +6,7 @@ class Losses():
         loss =  trajectory.log_norm_constant + trajectory.forward_probs.sum() - trajectory.backward_probs.sum() 
         return loss
     
-    def trajectory_balance(trajectory):
+    def trajectory_balance(trajectory, logz):
         # loss =  (trajectory.log_norm_constant * torch.prod(trajectory.forward_probs, 0)) / (torch.prod(trajectory.backward_probs, 0) * trajectory.rewards.sum())
         # return loss
         # log_norm_constant = trajectory.log_norm_constant
@@ -14,7 +14,8 @@ class Losses():
         # backward_probs = torch.prod(trajectory.backward_probs, 0)
         # reward = trajectory.rewards.sum()
         # loss = ( (log_norm_constant *  forward_probs) /  (backward_probs * reward) )
-        loss =  (trajectory.log_norm_constant * trajectory.forward_probs) / (trajectory.backward_probs * trajectory.rewards)
+        loss =  (logz + trajectory.forward_probs - trajectory.backward_probs - torch.log(trajectory.rewards).clip(-20)) ** 2
+
         return loss
 
     def step_test(step):

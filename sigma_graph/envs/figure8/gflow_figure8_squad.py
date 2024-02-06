@@ -179,6 +179,30 @@ class GlowFigure8Squad():
             'step_reward': step_reward,
             'node': node,
         })
+    
+    def step_simple(self, a_id):
+
+        node = self.team_red[0].get_info()["node"]
+
+        probs_forward = self.sampler_fcn.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        (forward_prob, action) = self.probs_to_action(probs_forward)
+        probs_backward = self.sampler_fcn.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        (backward_prob, _) = self.probs_to_action(probs_backward)
+        flow = self.sampler_fcn.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+
+        action_penalty_red = self._take_action_red(action)
+        step_reward = self._step_reward_test()
+
+        return ({
+            'done': False,
+            'forward_prob': forward_prob,
+            'backward_prob': backward_prob,
+            'flow': flow,
+            'action': action,
+            'step_reward': step_reward,
+            'node': node,
+        })
+
 
     def _take_action_red(self, n_actions):
         action_penalty = [0] * self.num_red
@@ -407,11 +431,13 @@ class GlowFigure8Squad():
         return rewards
     
     def _step_reward_test(self):
-        reward = 1
+        reward = 0
         for red_i in range(self.num_red):
             cur_node = self.team_red[red_i].get_info()["node"]
             if cur_node == 10:
-                reward += 10
+                reward += 2
+            if cur_node == 2:
+                reward += 1
         return reward
 
     def _episode_rewards_test(self, trajectory):
@@ -600,7 +626,9 @@ class GlowFigure8Squad():
         HP_red = self.configs["init_health_red"]
         for idx, init_red in enumerate(self.configs["init_red"]):
             r_eval_start_pos = self.n_eval_episodes if self.in_eval else None
-            r_code = env_setup.get_default_red_encoding(idx, init_red["pos"], r_eval_start_pos)
+            # TODO: Fix this
+            # r_code = env_setup.get_default_red_encoding(idx, init_red["pos"], r_eval_start_pos)
+            r_code = '11_0100' #env_setup.get_default_red_encoding(idx, 25, r_eval_start_pos)
             # why is this so complicated???
             r_node = 25 # self.map.get_index_by_name(r_code)
             r_dir = env_setup.get_default_dir(init_red["dir"])
