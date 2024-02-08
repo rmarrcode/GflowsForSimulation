@@ -281,14 +281,8 @@ class SamplerFCN(nn.Module):
     ):
         self_size = self.self_size
         self_obs = obs[0][:self_size].double()
-        features = self.mlp_forward(self_obs)
-        # double check activation
-        probs = torch.nn.functional.log_softmax(features, dim=0)
-
-        # sample = Categorical(probs).sample()
-        # action = self.convert_discrete_action_to_multidiscrete(sample)
-        # action[0] = action[0].cpu().tolist()
-        # action[1] = action[1].cpu().tolist()
+        probs = self.mlp_forward(self_obs)
+        #probs = torch.nn.functional.log_softmax(features, dim=0)
 
         return probs
     
@@ -299,15 +293,8 @@ class SamplerFCN(nn.Module):
         
         self_size = self.self_size
         self_obs = obs[0][:self_size].double()
-        features = self.mlp_backward(self_obs)
-        # double check activation
-        probs = torch.nn.functional.log_softmax(features, dim=0)
-
-        # sample = Categorical(probs).sample()
-        # # good idea to keep moving it
-        # action = self.convert_discrete_action_to_multidiscrete(sample)
-        # action[0] = action[0].cpu().tolist()
-        # action[1] = action[1].cpu().tolist()
+        probs = self.mlp_backward(self_obs)
+        #probs = torch.nn.functional.log_softmax(features, dim=0)
 
         return probs
     

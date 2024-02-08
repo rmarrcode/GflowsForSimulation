@@ -120,11 +120,13 @@ class GlowFigure8Squad():
         return [action % len(local_action_move), action // len(local_action_move)]
 
     def probs_to_action(self, probs):
-        sample = Categorical(probs).sample()
-        action = self.convert_discrete_action_to_multidiscrete(sample)
+        cat = Categorical(logits=probs)
+        action = cat.sample()
+        action_prob = cat.log_prob(action)
+        action = self.convert_discrete_action_to_multidiscrete(action)
         action[0] = action[0].cpu().tolist()
         action[1] = action[1].cpu().tolist()
-        return (probs[sample], [action])
+        return (action_prob, [action])
 
     # use observation from state var
     # make actions
