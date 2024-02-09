@@ -205,7 +205,6 @@ class GlowFigure8Squad():
             'node': node,
         })
 
-
     def _take_action_red(self, n_actions):
         action_penalty = [0] * self.num_red
         _action_stay_penalty = self.configs["penalty_stay"] if "penalty_stay" in self.configs else 0
