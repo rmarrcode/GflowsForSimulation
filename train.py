@@ -31,17 +31,21 @@ from trajectory import Trajectory
 import losses
 import torch.optim as optim
 
-WANDB = False
+WANDB = True
 SEED = 0
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 3e-4
+NUM_EPOCHS = 100000
+TRAJECTORY_LENGTH = 20
+BATCH_SIZE = 150
 
 if WANDB:
     wandb.init(
         project="graph-training-simulation",
         
         config={
-        "learning_rate": LEARNING_RATE,
-        # "epochs": 1000,
+            "learning_rate": LEARNING_RATE,
+            "epocs": NUM_EPOCHS,
+            "batch_size": BATCH_SIZE
         }
     )
 
@@ -147,53 +151,45 @@ def train(
     torch.manual_seed(SEED)
 
     gflowfigure8 = GlowFigure8Squad(sampler_config=config)
-
     optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=LEARNING_RATE)
-    num_epochs = 100000
-    batch_loss = 0
-    batch_num = 0
-    batch_reward = 0
 
-    for _ in range(num_epochs):
-        trajectory = Trajectory()
+    minibatch_loss = 0
+    minibatch_reward = 0
+
+    for episode in range(NUM_EPOCHS):
+    
+        TEMP_AGENT_INDEX = 0
         gflowfigure8._reset_agents()
-        
-        steps_in_trajectory = 20
-        for _ in range(steps_in_trajectory):   
-            for a_id in range(config['custom_model_config']['nred']):
-                step = gflowfigure8.step(a_id)
-                trajectory.add_step(
-                    forward_prob=step['forward_prob'],
-                    backward_prob=step['backward_prob'],
-                    # flow=step['flow'],
-                    # action=step['action'],
-                    reward=step['step_reward'],
-                    # node=step['node']
-                )
-                print(step['node'])
-                print(step['action'])
+
+        total_P_F = 0
+        total_P_B = 0
+
+        for t in range(TRAJECTORY_LENGTH):
+
+            step = gflowfigure8.step(TEMP_AGENT_INDEX)  
+            total_P_F += step['forward_prob']
+            total_P_B += step['backward_prob']
+
+            if t == TRAJECTORY_LENGTH-1:
+                reward_value = gflowfigure8._step_reward_test()
+                reward = torch.tensor(reward_value)
 
         logZ = gflowfigure8.sampler_fcn.logZ
+        loss = (logZ + total_P_F - torch.log(reward).clip(-20) - total_P_B).pow(2)
+        minibatch_loss += loss
+        minibatch_reward += reward
 
-        episode_loss = losses.Losses.trajectory_balance(trajectory, logZ)
-        episode_reward = trajectory.rewards
-
-        batch_num = batch_num + 1
-        batch_loss += episode_loss
-        batch_reward += episode_reward
-
-        batch_size = 150
-        if batch_num % batch_size == 0:
+        if episode % BATCH_SIZE == 0 and not episode == 0:
             if WANDB:
-                wandb.log({"loss": batch_loss/batch_size, "reward":  batch_reward/batch_size})
-                batch_loss = 0
-                batch_reward = 0
+                wandb.log({"loss": minibatch_loss/BATCH_SIZE, "reward":  minibatch_reward/BATCH_SIZE})
                 for name, param in gflowfigure8.sampler_fcn.named_parameters():
                     wandb.log({f"{name}_mean": param.data.mean().item(), f"{name}_std": param.data.std().item()})
-
-        episode_loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+                
+            minibatch_loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            minibatch_loss = 0
+            minibatch_reward = 0
 
 
 # run baseline tests with a few different algorithms

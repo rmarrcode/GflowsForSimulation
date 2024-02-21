@@ -119,6 +119,7 @@ class GlowFigure8Squad():
     def convert_discrete_action_to_multidiscrete(self, action):
         return [action % len(local_action_move), action // len(local_action_move)]
 
+    # TODO write this better
     def probs_to_action(self, probs):
         cat = Categorical(logits=probs)
         action = cat.sample()
@@ -153,9 +154,19 @@ class GlowFigure8Squad():
 
         # prev_obs = [self.states[a_id],]
         probs_forward = self.sampler_fcn.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
-        (forward_prob, action) = self.probs_to_action(probs_forward)
+        cat = Categorical(logits=probs_forward)
+        discrete_action = cat.sample()
+        forward_prob = cat.log_prob(discrete_action)
+        action = self.convert_discrete_action_to_multidiscrete(discrete_action)
+        action[0] = action[0].cpu().tolist()
+        action[1] = action[1].cpu().tolist()
+        action = [action]
+
+        # TODO check if backward action is its own thing
         probs_backward = self.sampler_fcn.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
-        (backward_prob, _) = self.probs_to_action(probs_backward)
+        #(backward_prob, _) = self.probs_to_action(probs_backward)
+        backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
+
         flow = self.sampler_fcn.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
 
         # update log
