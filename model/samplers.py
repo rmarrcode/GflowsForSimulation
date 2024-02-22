@@ -24,7 +24,7 @@ from torch.distributions import Categorical
 
 local_action_move = env_setup.act.MOVE_LOOKUP
 
-class Sampler(TMv2.TorchModelV2, nn.Module):
+class SamplerGNN(TMv2.TorchModelV2, nn.Module):
     def __init__(
         self,
         obs_space: gym.spaces.Space,
@@ -164,6 +164,8 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         self.adjacency = torch.LongTensor(self.adjacency).t().contiguous()
         self.adjacency = self.adjacency.to(self.device)
 
+        self.logZ = nn.Parameter(torch.ones(1))
+
         self.to(self.device)
 
     def convert_discrete_action_to_multidiscrete(self, action):
@@ -186,17 +188,18 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
             self._features = self._hiddens(torch.cat([self._features, obs], dim=1))
         probs = self._logits(self._features)
 
-        # what does this do
-        self._last_flat_in = obs.reshape(obs.shape[0], -1)
+        # # what does this do
+        # self._last_flat_in = obs.reshape(obs.shape[0], -1)
 
-        # TODO: revisit this 
-        # How does decision work??? What needs to be done
-        logits = torch.nn.functional.log_softmax(probs, dim=1)
-        dist = Categorical(logits)
-        sample = dist.sample().tolist()[0]
-        action = [self.convert_discrete_action_to_multidiscrete(sample)]
+        # # TODO: revisit this 
+        # # How does decision work??? What needs to be done
+        # logits = torch.nn.functional.log_softmax(probs, dim=1)
+        # dist = Categorical(logits)
+        # sample = dist.sample().tolist()[0]
+        # action = [self.convert_discrete_action_to_multidiscrete(sample)]
         
-        return (logits[0][sample], action)
+        #return (logits[0][sample], action)
+        return probs[0]
     
     def backward(
         self,
@@ -216,14 +219,16 @@ class Sampler(TMv2.TorchModelV2, nn.Module):
         probs = self._logits_backward(self._features_backward)
 
         # what does this do
-        self._last_flat_in = obs.reshape(obs.shape[0], -1)
+        # self._last_flat_in = obs.reshape(obs.shape[0], -1)
 
-        logits = torch.nn.functional.log_softmax(probs, dim=1)
-        dist = Categorical(logits)
-        sample = dist.sample().tolist()[0]
-        action = [self.convert_discrete_action_to_multidiscrete(sample)]
+        # logits = torch.nn.functional.log_softmax(probs, dim=1)
+        # dist = Categorical(logits)
+        # sample = dist.sample().tolist()[0]
+        # action = [self.convert_discrete_action_to_multidiscrete(sample)]
         
-        return (logits[0][sample], action)
+        # return (logits[0][sample], action)
+
+        return probs[0]
     
     def flow(
         self,

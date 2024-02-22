@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 
-from  model.samplers import Sampler, SamplerFCN
+from  model.samplers import SamplerGNN, SamplerFCN
 
 from sigma_graph.data.file_manager import load_graph_files, save_log_2_file, log_done_reward
 from sigma_graph.data.graph.skirmish_graph import MapInfo
@@ -70,28 +70,32 @@ class GlowFigure8Squad():
                                                     for _ in range(len(self.learning_agent))])
         self.obs = [[] for _ in range(len(self.learning_agent))]
         self.states = [[] for _ in range(len(self.learning_agent))]
-        self.sampler = Sampler(
-            obs_space=self.__observation_space,
-            action_space=self.__action_space,
-            num_outputs=15,
-            model_config={},
-            name='str',
-            map=self.map,
-            graph_obs_token=sampler_config['custom_model_config']['graph_obs_token'],
-            nred=sampler_config['custom_model_config']['nred'],
-            nblue=sampler_config['custom_model_config']['nblue'],
-            aggregation_fn=sampler_config['custom_model_config']['aggregation_fn'],
-            hidden_size=sampler_config['custom_model_config']['hidden_size'],
-            is_hybrid=sampler_config['custom_model_config']['is_hybrid'],
-            conv_type=sampler_config['custom_model_config']['conv_type'],
-            layernorm=sampler_config['custom_model_config']['layernorm'],
-            activation=torch.nn.functional.log_softmax
-        )
-        self.sampler_fcn = SamplerFCN(
-            self_size=27,
-            num_hiddens=512,
-            num_outputs=15
-        )
+        self.custom_model = sampler_config['custom_model']
+        
+        if sampler_config['custom_model'] == 'gnn':
+            self.sampler = SamplerGNN(
+                obs_space=self.__observation_space,
+                action_space=self.__action_space,
+                num_outputs=15,
+                model_config={},
+                name='str',
+                map=self.map,
+                graph_obs_token=sampler_config['custom_model_config']['graph_obs_token'],
+                nred=sampler_config['custom_model_config']['nred'],
+                nblue=sampler_config['custom_model_config']['nblue'],
+                aggregation_fn=sampler_config['custom_model_config']['aggregation_fn'],
+                hidden_size=sampler_config['custom_model_config']['hidden_size'],
+                is_hybrid=sampler_config['custom_model_config']['is_hybrid'],
+                conv_type=sampler_config['custom_model_config']['conv_type'],
+                layernorm=sampler_config['custom_model_config']['layernorm'],
+                activation=torch.nn.functional.log_softmax
+            )
+        elif sampler_config['custom_model'] == 'fcn':
+            self.sampler = SamplerFCN(
+                self_size=27,
+                num_hiddens=512,
+                num_outputs=15
+            )
 
     def reset(self, force=False):
         if self.in_eval:
@@ -153,7 +157,8 @@ class GlowFigure8Squad():
         R_engage_B, B_engage_R, R_overlay = self._update()
 
         # prev_obs = [self.states[a_id],]
-        probs_forward = self.sampler_fcn.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+
+        probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
         cat = Categorical(logits=probs_forward)
         discrete_action = cat.sample()
         forward_prob = cat.log_prob(discrete_action)
@@ -163,11 +168,11 @@ class GlowFigure8Squad():
         action = [action]
 
         # TODO check if backward action is its own thing
-        probs_backward = self.sampler_fcn.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        probs_backward = self.sampler.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
         #(backward_prob, _) = self.probs_to_action(probs_backward)
         backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
 
-        flow = self.sampler_fcn.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        flow = self.sampler.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
 
         # update log
         self._log_step_update(prev_obs, [action,], [0,])
@@ -181,7 +186,6 @@ class GlowFigure8Squad():
         #step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]
         step_reward = self._step_reward_test()
         n_done = self._get_step_done()
-
 
         return ({
             'done': False,

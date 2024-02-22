@@ -434,6 +434,7 @@ def create_policy_fc(
                 )
             )
             prev_layer_size = hiddens[-1]
+        # TODO figure out activation func
         if num_outputs:
             _logits = SlimFC(
                 in_size=prev_layer_size,
