@@ -16,9 +16,9 @@ import matplotlib.colors as mcolors
 
 op_to_dir = {
     'N': (0, 1), 
-    'S': (1, 0), 
-    'W': (0, -1),
-    'E': (-1, 0)
+    'S': (0, -1), 
+    'W': (-1, 0),
+    'E': (1, 0)
 }
 
 def agent_log_parser(line) -> dict:
@@ -75,57 +75,56 @@ def check_log_files(env_dir, log_dir, log_file):
 
 
 def generate_picture(env_dir, log_dir):
-    
     flows_path = f'{log_dir}/flows.json'
     with open(flows_path, "r") as flows_file:
         flows = json.load(flows_file)
 
-    print(f'flows {flows}')
-
     map_info, _ = load_graph_files(env_path=env_dir, map_lookup="S")
-    
+
     fig = plt.figure()
     fig.patch.set_alpha(0.)
     fig.tight_layout()
+    
     plt.axis('off')
-    
+
     col_map = ["gold"] * len(map_info.n_info)
-    
+
+    print(f'map_info.n_info {map_info.n_info}')
     nx.draw_networkx(map_info.g_acs, map_info.n_info, node_color=col_map, edge_color="blue", arrows=True)
 
     max_x = max(pos[0] for pos in map_info.n_info.values())
     max_y = max(pos[1] for pos in map_info.n_info.values())
-    scale_factor = max(max_x, max_y) / 500
+    scale_factor = max(max_x, max_y) / 2000
 
     for node in map_info.g_acs.nodes:
         pos = map_info.n_info[node]
         x, y = pos
-        # Node is adjusted for 0 indexed flow log
         dir_flows = flows[str(node-1)]
 
-        color_vals = np.linspace(0, 1, 100)
-        colors = [(color, color, color, 0) for color in color_vals]  
-        for op in ['N', 'S', 'W', 'E']:
-            flow = int((1 - dir_flows[op]) * 99)
-            dx, dy = op_to_dir[op]
-            plt.arrow(x, y, dx*scale_factor, dy*scale_factor, color=colors[flow], alpha=.8, width=0.02, head_width=0.5)
+        color_vals = np.linspace(0, 1.75, 100)
+        colors = [(color, 0, 0, 0) for color in color_vals]
 
-        circle_radius = 1.25  
+        for op in ['N', 'S', 'W', 'E']:
+            flow = int((dir_flows[op]) * 99)
+            dx, dy = op_to_dir[op]
+            plt.arrow(x, y, dx*scale_factor, dy*scale_factor, color=colors[flow], alpha=1, width=0.1, head_width=1)
+
+        circle_radius = 1.00 
         circle_center_x = x + circle_radius  
-        circle_center_y = y + circle_radius  
-        
-        flow = int((1 - dir_flows['NOOP']) * 99)
+        circle_center_y = y + circle_radius 
+
+        flow = int((dir_flows['NOOP']) * 99)
 
         circle = plt.Circle((circle_center_x, circle_center_y), circle_radius, color=colors[flow], alpha=0.8, fill=False, linewidth=2)
 
         plt.gca().add_patch(circle)
 
-
     cur_dir = os.getcwd()
     png_file = os.path.join(cur_dir, log_dir, "flows.png")
 
-    plt.savefig(png_file, dpi=100, transparent=True)
+    plt.savefig(png_file, dpi=100, transparent=False)
     plt.close()
+
 
 
 

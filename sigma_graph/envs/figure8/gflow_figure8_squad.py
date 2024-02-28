@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 
-from  model.samplers import SamplerGNN, SamplerFCN
+from  model.samplers import SamplerGNN, SamplerFCN, SamplerGCNCustom
 
 from sigma_graph.data.file_manager import load_graph_files, save_log_2_file, log_done_reward
 from sigma_graph.data.graph.skirmish_graph import MapInfo
@@ -95,6 +95,10 @@ class GlowFigure8Squad():
                 self_size=27,
                 num_hiddens=512,
                 num_outputs=15
+            )
+        elif sampler_config['custom_model'] == 'gnn_custom':
+            self.sampler = SamplerGCNCustom(
+                map=self.map
             )
 
     def reset(self, force=False):
@@ -451,9 +455,9 @@ class GlowFigure8Squad():
         for red_i in range(self.num_red):
             cur_node = self.team_red[red_i].get_info()["node"]
             if cur_node == 10:
-                reward += 2
-            if cur_node == 2:
-                reward += 1
+                reward += 100
+            # if cur_node == 2:
+            #     reward += 1
         return reward
 
     def _episode_rewards_test(self, trajectory):

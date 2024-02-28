@@ -249,6 +249,17 @@ class SamplerGNN(TMv2.TorchModelV2, nn.Module):
         return prob
     
     
+class SamplerGCNCustom(nn.Module):
+    def __init__(
+        self,
+        map
+    ):
+        self.map = map
+        
+    def forward(self, agent_location):
+        print(self.map)
+
+
 class SamplerFCN(nn.Module):
     def __init__(
         self,
