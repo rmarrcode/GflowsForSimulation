@@ -229,6 +229,9 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
 
     return node_embeddings.to(device)
 
+def create_node_embeddings(obs: torch.Tensor, map: ScoutMapInfo, obs_shapes):
+    pass
+
 
 def get_loc(one_hot_graph, graph_size, default=0, get_all=False):
     """

@@ -70,6 +70,8 @@ class GlowFigure8Squad():
                                                     for _ in range(len(self.learning_agent))])
         self.obs = [[] for _ in range(len(self.learning_agent))]
         self.states = [[] for _ in range(len(self.learning_agent))]
+        #self.positions = [[] for _ in range(len(self.learning_agent))]
+
         self.custom_model = sampler_config['custom_model']
         
         if sampler_config['custom_model'] == 'gnn':
@@ -98,7 +100,9 @@ class GlowFigure8Squad():
             )
         elif sampler_config['custom_model'] == 'gnn_custom':
             self.sampler = SamplerGCNCustom(
-                map=self.map
+                map=self.map,
+                nred=sampler_config['custom_model_config']['nred'],
+                nblue=sampler_config['custom_model_config']['nblue']
             )
 
     def reset(self, force=False):
@@ -161,8 +165,9 @@ class GlowFigure8Squad():
         R_engage_B, B_engage_R, R_overlay = self._update()
 
         # prev_obs = [self.states[a_id],]
-
         probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+
+        # TODO fix thiss
         cat = Categorical(logits=probs_forward)
         discrete_action = cat.sample()
         forward_prob = cat.log_prob(discrete_action)

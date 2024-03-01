@@ -2,7 +2,11 @@
 base class from https://github.com/ray-project/ray/blob/master/rllib/models/torch/fcnet.py
 """
 import torch.nn as nn
+from torch_geometric.nn import MessagePassing
+import torch.nn.functional as F
+from torch_geometric.utils import add_self_loops
 import torch
+
 import ray.rllib.models.torch.torch_modelv2 as TMv2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import Dict, TensorType, List, ModelConfigDict
@@ -249,15 +253,59 @@ class SamplerGNN(TMv2.TorchModelV2, nn.Module):
         return prob
     
     
-class SamplerGCNCustom(nn.Module):
-    def __init__(
-        self,
-        map
-    ):
+class SamplerGCNCustom(MessagePassing):
+    def __init__(self, map: MapInfo, in_node_channels=5, in_edge_channels=5, hidden_channels=32, out_channels=1, **kwargs):
+        super(SamplerGCNCustom, self).__init__(aggr='add')  
+        self.conv1 = nn.Conv2d(in_node_channels, hidden_channels, kernel_size=1)
+        self.conv2 = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
         self.map = map
+        self.num_red = kwargs["nred"]
+        self.num_blue = kwargs["nblue"]
+        self_shape, blue_shape, red_shape = env_setup.get_state_shapes(
+            self.map.get_graph_size(),
+            self.num_red,
+            self.num_blue,
+            env_setup.OBS_TOKEN,
+        )
+        self.obs_shapes = [
+            self_shape,
+            blue_shape,
+            red_shape,
+            self.num_red,
+            self.num_blue,
+        ]        
+        self.in_node_channels = in_node_channels
+        self.in_edge_channels = in_edge_channels
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+
+    def message(self, x_j):
+        return x_j
+
+    def forward(self, obs):
         
-    def forward(self, agent_location):
-        print(self.map)
+        g_acs = self.map.g_acs
+        num_nodes = g_acs.number_of_nodes()
+        num_edges = g_acs.number_of_edges()
+
+        # do custom encoding
+        x = torch.randn(num_nodes, self.in_node_channels)
+
+        edge_list = list(g_acs.edges())
+        edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
+        edge_attr = torch.randn(num_edges, self.in_edge_channels)
+
+        print(f'g_acs {g_acs.nodes}')
+        print(f'edge_list {edge_list}')
+        print(f'edge_index {edge_index}')
+        print(f'edge_attr {edge_attr}')
+        
+        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))  
+        x = F.relu(self.conv1(x))
+        x = self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
+        x = F.relu(self.conv2(x))
+
+        return x
 
 
 class SamplerFCN(nn.Module):
