@@ -254,7 +254,7 @@ class SamplerGNN(TMv2.TorchModelV2, nn.Module):
     
     
 class SamplerGCNCustom(MessagePassing):
-    def __init__(self, map: MapInfo, in_node_channels=5, in_edge_channels=5, hidden_channels=32, out_channels=1, **kwargs):
+    def __init__(self, map: MapInfo, in_node_channels=29, in_edge_channels=5, hidden_channels=32, out_channels=1, **kwargs):
         super(SamplerGCNCustom, self).__init__(aggr='add')  
         self.conv1 = nn.Conv2d(in_node_channels, hidden_channels, kernel_size=1)
         self.conv2 = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
@@ -284,12 +284,21 @@ class SamplerGCNCustom(MessagePassing):
 
     def forward(self, obs):
         
+        cur_node = utils.get_loc(obs, self.obs_shapes[0])
+        # TODO make reward global
+        reward_nodes = [10]
+
         g_acs = self.map.g_acs
         num_nodes = g_acs.number_of_nodes()
         num_edges = g_acs.number_of_edges()
 
         # do custom encoding
-        x = torch.randn(num_nodes, self.in_node_channels)
+        # x = torch.randn(num_nodes, self.in_node_channels)
+        # one hot position + agent presence + reward
+        graph_node_embedding = torch.zeros(num_nodes, self.obs_shapes[0]+2)
+        for node in num_nodes:
+            if node == cur_node:
+            elif node in reward_nodes:
 
         edge_list = list(g_acs.edges())
         edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
