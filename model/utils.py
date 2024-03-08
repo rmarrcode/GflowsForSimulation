@@ -199,7 +199,7 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
                 # pretty sure this is a bug
                 # start_idx_for_dir_i = len(blue_obs)-1-4*(blue_i+1)
                 start_idx_for_dir_i = len(blue_obs)-4*(blue_i+1)
-
+                
                 # pretty sure this is a bug 
                 # end_idx_for_dir_i = len(blue_obs)-1-4*blue_i
                 end_idx_for_dir_i = len(blue_obs)-4*blue_i

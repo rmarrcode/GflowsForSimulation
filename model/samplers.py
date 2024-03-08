@@ -253,68 +253,223 @@ class SamplerGNN(TMv2.TorchModelV2, nn.Module):
         return prob
     
     
-class SamplerGCNCustom(MessagePassing):
-    def __init__(self, map: MapInfo, in_node_channels=29, in_edge_channels=5, hidden_channels=32, out_channels=1, **kwargs):
-        super(SamplerGCNCustom, self).__init__(aggr='add')  
-        self.conv1 = nn.Conv2d(in_node_channels, hidden_channels, kernel_size=1)
-        self.conv2 = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
-        self.map = map
-        self.num_red = kwargs["nred"]
-        self.num_blue = kwargs["nblue"]
-        self_shape, blue_shape, red_shape = env_setup.get_state_shapes(
-            self.map.get_graph_size(),
-            self.num_red,
-            self.num_blue,
-            env_setup.OBS_TOKEN,
-        )
-        self.obs_shapes = [
-            self_shape,
-            blue_shape,
-            red_shape,
-            self.num_red,
-            self.num_blue,
-        ]        
-        self.in_node_channels = in_node_channels
-        self.in_edge_channels = in_edge_channels
-        self.hidden_channels = hidden_channels
-        self.out_channels = out_channels
+# class SamplerGCNCustom(MessagePassing):
+#     def __init__(self, map: MapInfo, in_node_channels=29, in_edge_channels=5, hidden_channels=32, out_channels=1, **kwargs):
+#         super(SamplerGCNCustom, self).__init__(aggr='add')  
+#         self.conv1 = nn.Conv2d(in_node_channels, hidden_channels, kernel_size=1)
+#         self.conv2 = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
+#         self.map = map
+#         self.num_red = kwargs["nred"]
+#         self.num_blue = kwargs["nblue"]
+#         self_shape, blue_shape, red_shape = env_setup.get_state_shapes(
+#             self.map.get_graph_size(),
+#             self.num_red,
+#             self.num_blue,
+#             env_setup.OBS_TOKEN,
+#         )
+#         self.obs_shapes = [
+#             self_shape,
+#             blue_shape,
+#             red_shape,
+#             self.num_red,
+#             self.num_blue,
+#         ]        
+#         self.in_node_channels = in_node_channels
+#         self.in_edge_channels = in_edge_channels
+#         self.hidden_channels = hidden_channels
+#         self.out_channels = out_channels
 
-    def message(self, x_j):
-        return x_j
+#     def message(self, x_j):
+#         return x_j
+
+#     def forward(self, obs):
+        
+#         cur_node = utils.get_loc(obs, self.obs_shapes[0])
+#         # TODO make reward global
+#         reward_nodes = [10]
+
+#         g_acs = self.map.g_acs
+#         num_nodes = g_acs.number_of_nodes()
+#         num_edges = g_acs.number_of_edges()
+
+#         # do custom encoding
+#         # x = torch.randn(num_nodes, self.in_node_channels)
+#         # one hot position + agent presence + reward
+#         graph_node_embedding = torch.zeros(num_nodes, self.obs_shapes[0]+2)
+#         for node in num_nodes:
+#             if node == cur_node:
+#             elif node in reward_nodes:
+
+#         edge_list = list(g_acs.edges())
+#         edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
+#         edge_attr = torch.randn(num_edges, self.in_edge_channels)
+
+#         print(f'g_acs {g_acs.nodes}')
+#         print(f'edge_list {edge_list}')
+#         print(f'edge_index {edge_index}')
+#         print(f'edge_attr {edge_attr}')
+        
+#         edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))  
+#         x = F.relu(self.conv1(x))
+#         x = self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
+#         x = F.relu(self.conv2(x))
+
+#         return x
+
+class SamplerAttnFCN(nn.Module):
+    def __init__(
+        self,
+        self_size,
+        num_hiddens_action,
+        num_outputs_action,
+        out_features,
+        n_heads,
+        is_concat,
+        map,
+        **kwargs
+    ):
+        nn.Module.__init__(self)
+
+        self.self_size = self_size
+        self.num_hiddens_action = num_hiddens_action
+        self.num_outputs_action = num_outputs_action
+        self.out_features = out_features
+        self.n_heads = n_heads
+        self.is_concat = is_concat
+        self.map = map
+
+        if is_concat:
+            assert out_features % n_heads == 0
+            self.n_hidden = out_features // n_heads
+        else:
+            self.n_hidden = out_features
+
+        self.reward_nodes = [10]
+
+        self.linear = nn.Linear(self_size+1, self.n_hidden * n_heads, dtype=float, bias=False)
+        self.attn = nn.Sequential(nn.Linear(self.n_hidden*2, 1, dtype=float))
+        self.activation = nn.LeakyReLU(negative_slope=0.2)
+        self.softmax = nn.Softmax()
+        self.dropout = nn.Dropout()
+
+        self.node_embeddings = torch.stack([
+            torch.cat(
+                (   
+                    F.one_hot(torch.tensor(node), self_size),
+                    torch.tensor([1.0] if (node + 1) in self.reward_nodes else [0.0], dtype=float)
+                ), dim=0
+            )
+            for node in range(self_size)
+        ])  
+
+        adj_matrix = torch.tensor(nx.adjacency_matrix(self.map.g_acs).toarray())
+        self.adj_matrix = adj_matrix.reshape((27, 27, 1))
+
+        self.mlp_forward = nn.Sequential(
+            nn.Linear(self_size+1, num_hiddens_action, dtype=float),
+            nn.LeakyReLU(),
+            nn.Linear(num_hiddens_action, num_outputs_action, dtype=float))
+        self.mlp_backward = nn.Sequential(
+            nn.Linear(self_size, num_hiddens_action, dtype=float), 
+            nn.LeakyReLU(),
+            nn.Linear(num_hiddens_action, num_outputs_action, dtype=float))
+        
+        self.logZ = nn.Parameter(torch.ones(1))
+
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+
+        self.to(self.device)
+
+    def convert_discrete_action_to_multidiscrete(self, action):
+        return [action % len(local_action_move), action // len(local_action_move)]
 
     def forward(self, obs):
+
+        g = self.linear(self.node_embeddings).view(self.self_size, self.n_heads, self.n_hidden)
+        g_repeat = g.repeat(self.self_size, 1, 1)
+        g_repeat_interleave = g.repeat_interleave(self.self_size, dim=0)
+        g_concat = torch.cat([g_repeat_interleave, g_repeat], dim=-1)
+        # index i,j is gi || gj
+        g_concat = g_concat.view(self.self_size, self.self_size, self.n_heads, 2 * self.n_hidden)
+        # apply to every pair
+        e = self.activation(self.attn(g_concat))
+        e = e.squeeze(-1)
+
+        assert self.adj_matrix.shape[0] == 1 or self.adj_matrix.shape[0] == self.self_size
+        assert self.adj_matrix.shape[1] == 1 or self.adj_matrix.shape[1] == self.self_size
+        assert self.adj_matrix.shape[2] == 1 or self.adj_matrix.shape[2] == self.n_heads
+
+        e = e.masked_fill(self.adj_matrix == 0, float('-inf'))
+        a = self.softmax(e)
+        a = self.dropout(a)
+        attn_res = torch.einsum('ijh,jhf->ihf', a, g)
+
+        if self.is_concat:
+            attn_res = attn_res.reshape(self.self_size, self.n_heads * self.n_hidden).clone()
+        else:
+            attn_res = attn_res.mean(dim=1).clone()
         
-        cur_node = utils.get_loc(obs, self.obs_shapes[0])
-        # TODO make reward global
-        reward_nodes = [10]
+        bool_obs = obs.bool()[0]
+        cur_node = utils.get_loc(bool_obs, self.self_size) + 1
+        probs = self.mlp_forward(attn_res[cur_node-1])
 
-        g_acs = self.map.g_acs
-        num_nodes = g_acs.number_of_nodes()
-        num_edges = g_acs.number_of_edges()
+        return probs
 
-        # do custom encoding
-        # x = torch.randn(num_nodes, self.in_node_channels)
-        # one hot position + agent presence + reward
-        graph_node_embedding = torch.zeros(num_nodes, self.obs_shapes[0]+2)
-        for node in num_nodes:
-            if node == cur_node:
-            elif node in reward_nodes:
 
-        edge_list = list(g_acs.edges())
-        edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
-        edge_attr = torch.randn(num_edges, self.in_edge_channels)
+    # def forward(
+    #     self,
+    #     obs,
+    # ):
+    #     # Update node embeddings
+    #     bool_obs = obs.bool()[0]
+    #     cur_node = utils.get_loc(bool_obs, self.self_size) + 1
+    #     neighbors = utils.get_nodes_ndeg_from_s(self.map.g_acs, cur_node, 1)
+    #     attn = torch.zeros(len(neighbors))
 
-        print(f'g_acs {g_acs.nodes}')
-        print(f'edge_list {edge_list}')
-        print(f'edge_index {edge_index}')
-        print(f'edge_attr {edge_attr}')
-        
-        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))  
-        x = F.relu(self.conv1(x))
-        x = self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
-        x = F.relu(self.conv2(x))
+    #     cur_node_embedding = self.node_embeddings[cur_node-1]
+    #     for i in range(len(neighbors)):
+    #         neighbor_embedding = self.node_embeddings[neighbors[i]-1] 
+    #         features = torch.cat((self.W(cur_node_embedding), self.W(neighbor_embedding)), dim=0)
+    #         _attn = attn.clone()
+    #         _attn[i] = self.attention(features)
+    #         attn = _attn.clone()
 
-        return x
+    #     attn = F.softmax(attn, dim=0)
+
+    #     _node_embeddings = self.node_embeddings.clone()
+    #     _node_embeddings[cur_node-1] = torch.tensor([0.]*(self.self_size+1), dtype=float)
+    #     self.node_embeddings = _node_embeddings.clone()
+
+    #     _weighted_embedding = torch.zeros(self.self_size+1, dtype=float)
+    #     for i in range(len(neighbors)):
+    #         # Seems like you shouldnt use w here
+    #         neighbors_embedding = self.node_embeddings[neighbors[i]-1]
+    #         _weighted_embedding = _weighted_embedding + (attn[i] * self.W(neighbors_embedding))
+                
+    #     _node_embeddings = self.node_embeddings.clone()
+    #     _node_embeddings[cur_node-1] = _weighted_embedding.clone()
+    #     self.node_embeddings = _node_embeddings.clone()
+
+    #     probs = self.mlp_forward(self.node_embeddings[cur_node-1])
+    #     return probs    
+
+    def backward(
+        self,
+        obs,
+    ):  
+        self_size = self.self_size
+        self_obs = obs[0][:self_size].double()
+        probs = self.mlp_backward(self_obs)
+
+        return probs
+    
+    def flow(
+        self,
+        obs,
+    ):
+        return 0
 
 
 class SamplerFCN(nn.Module):
@@ -390,3 +545,6 @@ class SimpleNetwork(nn.Module):
         x = self.relu(x)
         x = self.linear2(x)
         return x
+
+
+    
