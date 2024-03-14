@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import random
 
 from  model.samplers import *
 
@@ -111,7 +112,6 @@ class GlowFigure8Squad():
                 num_outputs_action=15,
                 out_features=28,
                 n_heads=4,
-                is_concat=True,
                 map=self.map,
                 nred=sampler_config['custom_model_config']['nred'],
                 nblue=sampler_config['custom_model_config']['nblue']
@@ -169,6 +169,7 @@ class GlowFigure8Squad():
         #     }
 
         # self._reset_agents()
+        reward_node = [random.randint(0, 26)]
         node = self.team_red[0].get_info()["node"]
 
         prev_obs = self._log_step_prev()
@@ -178,9 +179,10 @@ class GlowFigure8Squad():
         R_engage_B, B_engage_R, R_overlay = self._update()
 
         # prev_obs = [self.states[a_id],]
-        probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
+                                              reward_nodes=reward_node)
 
-        # TODO fix thiss
+        # TODO fix this
         cat = Categorical(logits=probs_forward)
         discrete_action = cat.sample()
         forward_prob = cat.log_prob(discrete_action)
@@ -206,7 +208,7 @@ class GlowFigure8Squad():
         self.agent_interaction(R_engage_B, B_engage_R)
 
         #step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]
-        step_reward = self._step_reward_test()
+        step_reward = self._step_reward_test(reward_node)
         n_done = self._get_step_done()
 
         return ({
@@ -468,11 +470,11 @@ class GlowFigure8Squad():
                                                     team_switch=False, **self.rewards["step"])
         return rewards
     
-    def _step_reward_test(self):
+    def _step_reward_test(self, reward_nodes):
         reward = 0
         for red_i in range(self.num_red):
             cur_node = self.team_red[red_i].get_info()["node"]
-            if cur_node == 2:
+            if cur_node in reward_nodes:
                 reward += 100
             # if cur_node == 2:
             #     reward += 1

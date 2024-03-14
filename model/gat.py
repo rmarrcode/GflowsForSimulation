@@ -20,10 +20,9 @@ class GraphAttentionLayer(nn.Module):
             self.n_hidden = out_features // n_heads
         else:
             self.n_hidden = out_features
-
       
-        self.linear = nn.Linear(in_features, self.n_hidden * n_heads, bias=False)
-        self.attn = nn.Linear(self.n_hidden * 2, 1, bias=False)
+        self.linear = nn.Linear(in_features, self.n_hidden * n_heads, bias=False, dtype=float)
+        self.attn = nn.Linear(self.n_hidden * 2, 1, bias=False, dtype=float)
         self.activation = nn.LeakyReLU(negative_slope=leaky_relu_negative_slope)
         self.softmax = nn.Softmax(dim=1)
         self.dropout = nn.Dropout(dropout)
