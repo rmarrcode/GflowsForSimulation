@@ -73,8 +73,11 @@ class GlowFigure8Squad():
         self.states = [[] for _ in range(len(self.learning_agent))]
         #self.positions = [[] for _ in range(len(self.learning_agent))]
 
+        self.region_nodes = {15, 14, 10, 9, 8}
+        self.reward_type = sampler_config['reward']
         self.custom_model = sampler_config['custom_model']
-        
+        self.encoding = sampler_config['encoding']
+
         if sampler_config['custom_model'] == 'gnn':
             self.sampler = SamplerGNN(
                 obs_space=self.__observation_space,
@@ -111,13 +114,13 @@ class GlowFigure8Squad():
                 num_hiddens_action=512,
                 num_outputs_action=15,
                 out_features=28,
-                n_heads=4,
+                n_heads=1,
                 map=self.map,
                 nred=sampler_config['custom_model_config']['nred'],
-                nblue=sampler_config['custom_model_config']['nblue']
+                nblue=sampler_config['custom_model_config']['nblue'],
+                encoding = self.encoding
             )
         
-
     def reset(self, force=False):
         if self.in_eval:
             self.n_eval_episodes += 1
@@ -169,7 +172,12 @@ class GlowFigure8Squad():
         #     }
 
         # self._reset_agents()
-        reward_node = [random.randint(0, 26)]
+
+        if self.reward_type == 'random':
+            reward_node = [random.randint(0, 26)]
+        elif self.reward_type == 'random_region':
+            reward_node = random.sample(self.region_nodes, 1)
+
         node = self.team_red[0].get_info()["node"]
 
         prev_obs = self._log_step_prev()
@@ -207,8 +215,14 @@ class GlowFigure8Squad():
         # R_engage_B, B_engage_R, R_overlay = self._update()
         self.agent_interaction(R_engage_B, B_engage_R)
 
-        #step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]
-        step_reward = self._step_reward_test(reward_node)
+        if self.reward_type == 'complex':
+            step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]            
+        elif self.reward_type == 'random':
+            step_reward = self._step_reward_test(reward_node)
+        elif self.reward_type == 'random_region':
+            step_reward = self._step_reward_test(reward_node)
+
+
         n_done = self._get_step_done()
 
         return ({

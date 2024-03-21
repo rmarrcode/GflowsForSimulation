@@ -326,21 +326,25 @@ class SamplerAttnFCN(nn.Module):
         out_features,
         n_heads,
         map,
+        encoding,
         **kwargs
     ):
         nn.Module.__init__(self)
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.self_size = self_size
         self.num_hiddens_action = num_hiddens_action
         self.num_outputs_action = num_outputs_action
         self.out_features = out_features
         self.n_heads = n_heads
+        self.encoding = encoding
         self.map = map
 
         # acurate???
         #self.reward_nodes = [2]
 
-        adj_matrix = torch.tensor(nx.adjacency_matrix(self.map.g_acs).toarray())
+        adj_matrix = torch.tensor(nx.adjacency_matrix(self.map.g_acs).toarray(), device=self.device)
         self.adj_matrix = adj_matrix.reshape((27, 27, 1))
 
         self.mlp_forward = nn.Sequential(
@@ -354,18 +358,18 @@ class SamplerAttnFCN(nn.Module):
         
         self.logZ = nn.Parameter(torch.ones(1))
 
-        in_features = self_size+1
-        n_hidden = in_features
-        dropout=0.6
+        if self.encoding == "number":
+            in_features = self_size + 1
+        elif self.encoding == "coordinate":
+            in_features = 3
+
+        n_hidden = 32 #in_features
+        dropout = 0.6
         self.layer1 = GraphAttentionLayer(in_features, n_hidden, n_heads, is_concat=True, dropout=dropout)
         self.activation = nn.ELU()
         self.layer2 = GraphAttentionLayer(n_hidden, n_hidden, n_heads, is_concat=True, dropout=dropout)
-        self.output = GraphAttentionLayer(n_hidden, in_features, 1, is_concat=False, dropout=dropout)
+        self.output = GraphAttentionLayer(n_hidden, self_size + 1, 1, is_concat=False, dropout=dropout)
         self.dropout = nn.Dropout(dropout)
-
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
 
         self.to(self.device)
 
@@ -374,15 +378,27 @@ class SamplerAttnFCN(nn.Module):
 
     def forward(self, obs, reward_nodes):
 
-        node_embeddings = torch.stack([
-            torch.cat(
-                (   
-                    F.one_hot(torch.tensor(node), self.self_size),
-                    torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float)
-                ), dim=0
-            )
-            for node in range(self.self_size)
-        ])  
+        if self.encoding == "number":
+            node_embeddings = torch.stack([
+                torch.cat(
+                    (   
+                        F.one_hot(torch.tensor(node, device=self.device), self.self_size),
+                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
+                    ), dim=0
+                )
+                for node in range(self.self_size)
+            ])  
+        elif self.encoding == "coordinate":
+            node = self.map.n_info
+            node_embeddings = torch.stack([
+                torch.cat(
+                    (   
+                        torch.tensor([self.map.n_info[node+1][0], self.map.n_info[node+1][1]], device=self.device),
+                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
+                    ), dim=0
+                )
+                for node in range(self.self_size)
+            ])  
 
         x = self.dropout(node_embeddings)
         x = self.layer1(x, self.adj_matrix)

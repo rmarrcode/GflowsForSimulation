@@ -27,6 +27,12 @@ class GraphAttentionLayer(nn.Module):
         self.softmax = nn.Softmax(dim=1)
         self.dropout = nn.Dropout(dropout)
 
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+
+        self.to(self.device)
+
     def forward(self, h: torch.Tensor, adj_mat: torch.Tensor):
         
         n_nodes = h.shape[0]
