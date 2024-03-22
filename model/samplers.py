@@ -161,6 +161,7 @@ class SamplerGNN(TMv2.TorchModelV2, nn.Module):
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
+        
         self.adjacency = []
         for n in map.g_acs.adj:
             ms = map.g_acs.adj[n]
@@ -389,7 +390,6 @@ class SamplerAttnFCN(nn.Module):
                 for node in range(self.self_size)
             ])  
         elif self.encoding == "coordinate":
-            node = self.map.n_info
             node_embeddings = torch.stack([
                 torch.cat(
                     (   

@@ -73,7 +73,7 @@ class GlowFigure8Squad():
         self.states = [[] for _ in range(len(self.learning_agent))]
         #self.positions = [[] for _ in range(len(self.learning_agent))]
 
-        self.region_nodes = {15, 14, 10, 9, 8}
+        self.region_nodes = {16, 15, 11, 10, 9}
         self.reward_type = sampler_config['reward']
         self.custom_model = sampler_config['custom_model']
         self.encoding = sampler_config['encoding']
@@ -174,9 +174,9 @@ class GlowFigure8Squad():
         # self._reset_agents()
 
         if self.reward_type == 'random':
-            reward_node = [random.randint(0, 26)]
+            reward_node_1i = [random.randint(1, 27)]
         elif self.reward_type == 'random_region':
-            reward_node = random.sample(self.region_nodes, 1)
+            reward_node_1i = random.sample(self.region_nodes, 1)
 
         node = self.team_red[0].get_info()["node"]
 
@@ -188,7 +188,7 @@ class GlowFigure8Squad():
 
         # prev_obs = [self.states[a_id],]
         probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
-                                              reward_nodes=reward_node)
+                                              reward_nodes=reward_node_1i)
 
         # TODO fix this
         cat = Categorical(logits=probs_forward)
@@ -218,9 +218,9 @@ class GlowFigure8Squad():
         if self.reward_type == 'complex':
             step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]            
         elif self.reward_type == 'random':
-            step_reward = self._step_reward_test(reward_node)
+            step_reward = self._step_reward_test(reward_node_1i)
         elif self.reward_type == 'random_region':
-            step_reward = self._step_reward_test(reward_node)
+            step_reward = self._step_reward_test(reward_node_1i)
 
 
         n_done = self._get_step_done()
@@ -487,6 +487,7 @@ class GlowFigure8Squad():
     def _step_reward_test(self, reward_nodes):
         reward = 0
         for red_i in range(self.num_red):
+            # 0 or 1 indexed
             cur_node = self.team_red[red_i].get_info()["node"]
             if cur_node in reward_nodes:
                 reward += 100
