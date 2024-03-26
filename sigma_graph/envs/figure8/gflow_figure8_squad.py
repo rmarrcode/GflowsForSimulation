@@ -76,7 +76,7 @@ class GlowFigure8Squad():
         self.region_nodes = {16, 15, 11, 10, 9}
         self.reward_type = sampler_config['reward']
         self.custom_model = sampler_config['custom_model']
-        self.encoding = sampler_config['encoding']
+        self.embedding = sampler_config['embedding']
 
         if sampler_config['custom_model'] == 'gnn':
             self.sampler = SamplerGNN(
@@ -118,7 +118,7 @@ class GlowFigure8Squad():
                 map=self.map,
                 nred=sampler_config['custom_model_config']['nred'],
                 nblue=sampler_config['custom_model_config']['nblue'],
-                encoding = self.encoding
+                embedding = self.embedding
             )
         
     def reset(self, force=False):
@@ -177,6 +177,8 @@ class GlowFigure8Squad():
             reward_node_1i = [random.randint(1, 27)]
         elif self.reward_type == 'random_region':
             reward_node_1i = random.sample(self.region_nodes, 1)
+        elif self.reward_type == '10':
+            reward_node_1i = [10]
 
         node = self.team_red[0].get_info()["node"]
 
@@ -217,11 +219,8 @@ class GlowFigure8Squad():
 
         if self.reward_type == 'complex':
             step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]            
-        elif self.reward_type == 'random':
+        else:
             step_reward = self._step_reward_test(reward_node_1i)
-        elif self.reward_type == 'random_region':
-            step_reward = self._step_reward_test(reward_node_1i)
-
 
         n_done = self._get_step_done()
 

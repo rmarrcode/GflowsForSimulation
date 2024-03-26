@@ -327,7 +327,7 @@ class SamplerAttnFCN(nn.Module):
         out_features,
         n_heads,
         map,
-        encoding,
+        embedding,
         **kwargs
     ):
         nn.Module.__init__(self)
@@ -339,7 +339,7 @@ class SamplerAttnFCN(nn.Module):
         self.num_outputs_action = num_outputs_action
         self.out_features = out_features
         self.n_heads = n_heads
-        self.encoding = encoding
+        self.embedding = embedding
         self.map = map
 
         # acurate???
@@ -348,8 +348,13 @@ class SamplerAttnFCN(nn.Module):
         adj_matrix = torch.tensor(nx.adjacency_matrix(self.map.g_acs).toarray(), device=self.device)
         self.adj_matrix = adj_matrix.reshape((27, 27, 1))
 
+        if self.embedding == "number":
+            in_features = self_size
+        elif self.embedding == "coordinate":
+            in_features = 2
+
         self.mlp_forward = nn.Sequential(
-            nn.Linear(self_size+1, num_hiddens_action, dtype=float),
+            nn.Linear(in_features+1, num_hiddens_action, dtype=float),
             nn.LeakyReLU(),
             nn.Linear(num_hiddens_action, num_outputs_action, dtype=float))
         self.mlp_backward = nn.Sequential(
@@ -359,18 +364,21 @@ class SamplerAttnFCN(nn.Module):
         
         self.logZ = nn.Parameter(torch.ones(1))
 
-        if self.encoding == "number":
-            in_features = self_size + 1
-        elif self.encoding == "coordinate":
-            in_features = 3
-
         n_hidden = 32 #in_features
         dropout = 0.6
         self.layer1 = GraphAttentionLayer(in_features, n_hidden, n_heads, is_concat=True, dropout=dropout)
         self.activation = nn.ELU()
         self.layer2 = GraphAttentionLayer(n_hidden, n_hidden, n_heads, is_concat=True, dropout=dropout)
-        self.output = GraphAttentionLayer(n_hidden, self_size + 1, 1, is_concat=False, dropout=dropout)
+        self.output = GraphAttentionLayer(n_hidden, in_features, 1, is_concat=False, dropout=dropout)
         self.dropout = nn.Dropout(dropout)
+
+        if self.embedding == "number":
+            self.dynamic_embedding = torch.stack([F.one_hot(torch.tensor(node, device=self.device), self.self_size) for node in range(self.self_size)])
+        elif self.embedding == "coordinate":
+            self.dynamic_embedding = torch.stack([torch.tensor([self.map.n_info[node+1][0], self.map.n_info[node+1][1]], device=self.device, dtype=float) for node in range(self.self_size)])
+        else:
+            #TODO: throw some error 
+            pass
 
         self.to(self.device)
 
@@ -378,29 +386,8 @@ class SamplerAttnFCN(nn.Module):
         return [action % len(local_action_move), action // len(local_action_move)]
 
     def forward(self, obs, reward_nodes):
-
-        if self.encoding == "number":
-            node_embeddings = torch.stack([
-                torch.cat(
-                    (   
-                        F.one_hot(torch.tensor(node, device=self.device), self.self_size),
-                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
-                    ), dim=0
-                )
-                for node in range(self.self_size)
-            ])  
-        elif self.encoding == "coordinate":
-            node_embeddings = torch.stack([
-                torch.cat(
-                    (   
-                        torch.tensor([self.map.n_info[node+1][0], self.map.n_info[node+1][1]], device=self.device),
-                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
-                    ), dim=0
-                )
-                for node in range(self.self_size)
-            ])  
-
-        x = self.dropout(node_embeddings)
+        
+        x = self.dropout(self.dynamic_embedding)
         x = self.layer1(x, self.adj_matrix)
         x = self.activation(x)
         x = self.dropout(x)
@@ -408,9 +395,20 @@ class SamplerAttnFCN(nn.Module):
         x = self.activation(x)
         x = self.output(x, self.adj_matrix)
 
+        # TODO: Examine and fix
+        self.dynamic_embedding = x.detach().clone()
+
         bool_obs = obs.bool()[0]
         cur_node = utils.get_loc(bool_obs, self.self_size) + 1
-        probs = self.mlp_forward(x[cur_node-1])
+
+        reward_nodes = torch.stack([torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device) for node in range(self.self_size)])
+        final_embeddings = torch.cat(
+                (   
+                    self.dynamic_embedding,
+                    reward_nodes
+                ), dim=1
+            )
+        probs = self.mlp_forward(final_embeddings[cur_node-1])
 
         return probs
 
