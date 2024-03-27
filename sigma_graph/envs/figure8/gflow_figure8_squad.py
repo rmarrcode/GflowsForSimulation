@@ -73,7 +73,6 @@ class GlowFigure8Squad():
         self.states = [[] for _ in range(len(self.learning_agent))]
         #self.positions = [[] for _ in range(len(self.learning_agent))]
 
-        self.region_nodes = {16, 15, 11, 10, 9}
         self.reward_type = sampler_config['reward']
         self.custom_model = sampler_config['custom_model']
         self.embedding = sampler_config['embedding']
@@ -161,7 +160,7 @@ class GlowFigure8Squad():
     # make actions
     # update state 
     # update observation
-    def step(self, a_id):
+    def step(self, a_id, reward_nodes):
 
         # make n actions
 
@@ -173,13 +172,6 @@ class GlowFigure8Squad():
 
         # self._reset_agents()
 
-        if self.reward_type == 'random':
-            reward_node_1i = [random.randint(1, 27)]
-        elif self.reward_type == 'random_region':
-            reward_node_1i = random.sample(self.region_nodes, 1)
-        elif self.reward_type == '10':
-            reward_node_1i = [10]
-
         node = self.team_red[0].get_info()["node"]
 
         prev_obs = self._log_step_prev()
@@ -190,7 +182,7 @@ class GlowFigure8Squad():
 
         # prev_obs = [self.states[a_id],]
         probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
-                                              reward_nodes=reward_node_1i)
+                                              reward_nodes=reward_nodes)
 
         # TODO fix this
         cat = Categorical(logits=probs_forward)
@@ -220,7 +212,7 @@ class GlowFigure8Squad():
         if self.reward_type == 'complex':
             step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]            
         else:
-            step_reward = self._step_reward_test(reward_node_1i)
+            step_reward = self._step_reward_test(reward_nodes)
 
         n_done = self._get_step_done()
 
