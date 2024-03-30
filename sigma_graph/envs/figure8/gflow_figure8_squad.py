@@ -156,6 +156,9 @@ class GlowFigure8Squad():
         action[1] = action[1].cpu().tolist()
         return (action_prob, [action])
 
+
+    def update_reward(self, reward_nodes):
+        self.sampler.update_reward(reward_nodes)
     # use observation from state var
     # make actions
     # update state 
@@ -226,6 +229,8 @@ class GlowFigure8Squad():
             'node': node,
         })
     
+
+
     def step_simple(self, a_id):
 
         node = self.team_red[0].get_info()["node"]

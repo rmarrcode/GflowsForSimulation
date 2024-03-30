@@ -354,7 +354,7 @@ class SamplerAttnFCN(nn.Module):
             in_features = 2
 
         self.mlp_forward = nn.Sequential(
-            nn.Linear(in_features+1, num_hiddens_action, dtype=float),
+            nn.Linear(in_features+2, num_hiddens_action, dtype=float),
             nn.LeakyReLU(),
             nn.Linear(num_hiddens_action, num_outputs_action, dtype=float))
         self.mlp_backward = nn.Sequential(
@@ -364,18 +364,36 @@ class SamplerAttnFCN(nn.Module):
         
         self.logZ = nn.Parameter(torch.ones(1))
 
-        n_hidden = 32 #in_features
+        n_hidden = 32 
         dropout = 0.6
-        self.layer1 = GraphAttentionLayer(in_features, n_hidden, n_heads, is_concat=True, dropout=dropout)
+        self.layer1 = GraphAttentionLayer(in_features+1, n_hidden, n_heads, is_concat=True, dropout=dropout)
         self.activation = nn.ELU()
         self.layer2 = GraphAttentionLayer(n_hidden, n_hidden, n_heads, is_concat=True, dropout=dropout)
-        self.output = GraphAttentionLayer(n_hidden, in_features, 1, is_concat=False, dropout=dropout)
+        self.output = GraphAttentionLayer(n_hidden, in_features+1, 1, is_concat=False, dropout=dropout)
         self.dropout = nn.Dropout(dropout)
+        
 
+    def update_reward(self, reward_nodes):
         if self.embedding == "number":
-            self.dynamic_embedding = torch.stack([F.one_hot(torch.tensor(node, device=self.device), self.self_size) for node in range(self.self_size)])
+            self.dynamic_embedding = torch.stack([
+                torch.cat(
+                    (   
+                        F.one_hot(torch.tensor(node, device=self.device), self.self_size),
+                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
+                    ), dim=0
+                )
+                for node in range(self.self_size)
+            ])  
         elif self.embedding == "coordinate":
-            self.dynamic_embedding = torch.stack([torch.tensor([self.map.n_info[node+1][0], self.map.n_info[node+1][1]], device=self.device, dtype=float) for node in range(self.self_size)])
+            self.dynamic_embedding = torch.stack([
+                torch.cat(
+                    (   
+                        torch.tensor([self.map.n_info[node+1][0], self.map.n_info[node+1][1]], device=self.device),
+                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
+                    ), dim=0
+                )
+                for node in range(self.self_size)
+            ])  
         else:
             #TODO: throw some error 
             pass
@@ -396,18 +414,13 @@ class SamplerAttnFCN(nn.Module):
         x = self.output(x, self.adj_matrix)
 
         # TODO: Examine and fix
-        self.dynamic_embedding = x.detach().clone()
+        self.dynamic_embedding = x.clone()
 
         bool_obs = obs.bool()[0]
         cur_node = utils.get_loc(bool_obs, self.self_size) + 1
 
         reward_nodes = torch.stack([torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device) for node in range(self.self_size)])
-        final_embeddings = torch.cat(
-                (   
-                    self.dynamic_embedding,
-                    reward_nodes
-                ), dim=1
-            )
+        final_embeddings = torch.cat((self.dynamic_embedding, reward_nodes), dim=1)
         probs = self.mlp_forward(final_embeddings[cur_node-1])
 
         return probs

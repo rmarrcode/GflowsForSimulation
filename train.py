@@ -75,37 +75,8 @@ def run(config):
             name=run_name
         )
 
-    LEARNING_RATE = 3e-4
     gflowfigure8 = GlowFigure8Squad(sampler_config=config)
-    # sampler_fcn -> sampler
-    # TODO: this is bad revisit and come up with something more concise
-
     optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=LEARNING_RATE)
-
-    if WANDB:
-        wandb.init(
-            project="graph-training-simulation",
-            config={
-                    "model_config": config,
-                    "exp_config": {
-                    "learning_rate": LEARNING_RATE,
-                    "epocs": NUM_EPOCHS,
-                    "batch_size": BATCH_SIZE
-                }
-            },
-            name=run_name
-        )
-
-    LEARNING_RATE = 3e-4
-    gflowfigure8 = GlowFigure8Squad(sampler_config=config)
-    # sampler_fcn -> sampler
-    # TODO: this is bad revisit and come up with something more concise
-
-    optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=LEARNING_RATE)
-
-    # Using sigma code fully
-
-    torch.autograd.set_detect_anomaly(True)
 
     minibatch_loss = 0
     minibatch_reward = 0
@@ -125,17 +96,18 @@ def run(config):
         region_nodes = {16, 15, 11, 10, 9}
 
         if config['custom_model_config']['reward'] == 'random':
-            reward_node_1i = [random.randint(1, 27)]
+            reward_node = [random.randint(1, 27)]
         elif config['custom_model_config']['reward'] == 'random_region':
-            reward_node_1i = random.sample(region_nodes, 1)
+            reward_node = random.sample(region_nodes, 1)
         elif config['custom_model_config']['reward'] == '10':
-            reward_node_1i = [10]
+            reward_node = [10]
         elif config['custom_model_config']['reward'] == 'complex':
-            reward_node_1i = []
+            reward_node = []
                     
+        gflowfigure8.update_reward(reward_node)
         for t in range(TRAJECTORY_LENGTH):
 
-            step = gflowfigure8.step(TEMP_AGENT_INDEX, reward_node_1i)  
+            step = gflowfigure8.step(TEMP_AGENT_INDEX, reward_node)  
             total_P_F += step['forward_prob']
             total_P_B += step['backward_prob']
             #total_reward += torch.tensor(gflowfigure8._step_reward_test())
