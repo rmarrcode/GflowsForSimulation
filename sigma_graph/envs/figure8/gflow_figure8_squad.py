@@ -73,11 +73,11 @@ class GlowFigure8Squad():
         self.states = [[] for _ in range(len(self.learning_agent))]
         #self.positions = [[] for _ in range(len(self.learning_agent))]
 
-        self.reward_type = sampler_config['reward']
-        self.custom_model = sampler_config['custom_model']
-        self.embedding = sampler_config['embedding']
+        self.reward_type = sampler_config['custom_model_config']['reward']
+        self.custom_model = sampler_config['custom_model_config']['custom_model']
+        self.embedding = sampler_config['custom_model_config']['embedding']
 
-        if sampler_config['custom_model'] == 'gnn':
+        if sampler_config['custom_model_config']['custom_model'] == 'gnn':
             self.sampler = SamplerGNN(
                 obs_space=self.__observation_space,
                 action_space=self.__action_space,
@@ -95,19 +95,19 @@ class GlowFigure8Squad():
                 layernorm=sampler_config['custom_model_config']['layernorm'],
                 activation=torch.nn.functional.log_softmax
             )
-        elif sampler_config['custom_model'] == 'fcn':
+        elif sampler_config['custom_model_config']['custom_model'] == 'fcn':
             self.sampler = SamplerFCN(
                 self_size=27,
                 num_hiddens=512,
                 num_outputs=15
             )
-        elif sampler_config['custom_model'] == 'gnn_custom':
+        elif sampler_config['custom_model_config']['custom_model'] == 'gnn_custom':
             self.sampler = SamplerGCNCustom(
                 map=self.map,
                 nred=sampler_config['custom_model_config']['nred'],
                 nblue=sampler_config['custom_model_config']['nblue']
             )
-        elif sampler_config['custom_model'] == 'attn_fcn':
+        elif sampler_config['custom_model_config']['custom_model'] == 'attn_fcn':
             self.sampler = SamplerAttnFCN(
                 self_size=27,
                 num_hiddens_action=512,
