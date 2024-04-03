@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 # from matplotlib.animation import FuncAnimation, PillowWriter
 from sigma_graph.data.file_manager import check_dir, find_file_in_dir, load_graph_files
 
+#python sigma_graph/visual/generate_animation_from_logs.py --env_dir . --log_dir logs/temp --prefix log_done --background logs/background.png
+
 def agent_log_parser(line) -> dict:
     agent_info = {}
     # parse team info

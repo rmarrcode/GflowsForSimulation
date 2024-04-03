@@ -7,6 +7,7 @@ from .graph.skirmish_graph import MapInfo, RouteInfo
 
 # select which map to use
 MAP_LOOKUP = {
+    "XS": "_15",
     "S": "_27",
     "M": "_41",
     "L": "_73",
@@ -90,6 +91,7 @@ def load_graph_files(env_path="./", map_lookup="S", route_lookup=["0"], is_pickl
     for idx in range(len(route_lookup)):
         data_pat = find_file_in_dir(path_data, "{}_{}{}.{}".format(DATA_LOOKUP["patrol_route"], route_lookup[idx],
                                                                    map_id, file_data))
+        print(f'data_pat {data_pat}')
         cur_pat[idx].load_route_pickle(data_pat)
 
     return cur_map, cur_pat

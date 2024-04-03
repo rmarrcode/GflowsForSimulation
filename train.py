@@ -59,93 +59,93 @@ def run(config):
     LEARNING_RATE = config['exp_config']['learning_rate']
     WANDB = config['exp_config']['wandb']
 
-    run_name = f"{config['custom_model_config']['custom_model']}-{config['custom_model_config']['reward']}-{config['custom_model_config']['embedding']}"
+    # run_name = f"{config['custom_model_config']['custom_model']}-{config['custom_model_config']['reward']}-{config['custom_model_config']['embedding']}"
 
-    if WANDB:
-        wandb.init(
-            project="graph-training-simulation",
-            config={
-                    "model_config": config,
-                    "exp_config": {
-                    "learning_rate": LEARNING_RATE,
-                    "epocs": NUM_EPOCHS,
-                    "batch_size": BATCH_SIZE
-                }
-            },
-            name=run_name
-        )
+    # if WANDB:
+    #     wandb.init(
+    #         project="graph-training-simulation",
+    #         config={
+    #                 "model_config": config,
+    #                 "exp_config": {
+    #                 "learning_rate": LEARNING_RATE,
+    #                 "epocs": NUM_EPOCHS,
+    #                 "batch_size": BATCH_SIZE
+    #             }
+    #         },
+    #         name=run_name
+    #     )
 
-    gflowfigure8 = GlowFigure8Squad(sampler_config=config)
-    optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=LEARNING_RATE)
+    # gflowfigure8 = GlowFigure8Squad(sampler_config=config)
+    # optimizer = optim.AdamW(gflowfigure8.sampler.parameters(), lr=LEARNING_RATE)
 
-    minibatch_loss = 0
-    minibatch_reward = 0
-    minibatch_z = 0
-    minibatch_pf = 0
-    minibatch_pb = 0
+    # minibatch_loss = 0
+    # minibatch_reward = 0
+    # minibatch_z = 0
+    # minibatch_pf = 0
+    # minibatch_pb = 0
 
-    for episode in tqdm.tqdm(range(NUM_EPOCHS), ncols=40):
+    # for episode in tqdm.tqdm(range(NUM_EPOCHS), ncols=40):
     
-        TEMP_AGENT_INDEX = 0
-        gflowfigure8._reset_agents()
+    #     TEMP_AGENT_INDEX = 0
+    #     gflowfigure8._reset_agents()
         
-        total_P_F = 0
-        total_P_B = 0
-        total_reward = 0
+    #     total_P_F = 0
+    #     total_P_B = 0
+    #     total_reward = 0
 
-        region_nodes = {16, 15, 11, 10, 9}
+    #     region_nodes = {16, 15, 11, 10, 9}
 
-        if config['custom_model_config']['reward'] == 'random':
-            reward_node = [random.randint(1, 27)]
-        elif config['custom_model_config']['reward'] == 'random_region':
-            reward_node = random.sample(region_nodes, 1)
-        elif config['custom_model_config']['reward'] == '10':
-            reward_node = [10]
-        elif config['custom_model_config']['reward'] == 'complex':
-            reward_node = []
+    #     if config['custom_model_config']['reward'] == 'random':
+    #         reward_node = [random.randint(1, 27)]
+    #     elif config['custom_model_config']['reward'] == 'random_region':
+    #         reward_node = random.sample(region_nodes, 1)
+    #     elif config['custom_model_config']['reward'] == '10':
+    #         reward_node = [10]
+    #     elif config['custom_model_config']['reward'] == 'complex':
+    #         reward_node = []
                     
-        gflowfigure8.update_reward(reward_node)
-        for t in range(TRAJECTORY_LENGTH):
+    #     gflowfigure8.update_reward(reward_node)
+    #     for t in range(TRAJECTORY_LENGTH):
 
-            step = gflowfigure8.step(TEMP_AGENT_INDEX, reward_node)  
-            total_P_F += step['forward_prob']
-            total_P_B += step['backward_prob']
-            #total_reward += torch.tensor(gflowfigure8._step_reward_test())
-            total_reward += step['step_reward']
+    #         step = gflowfigure8.step(TEMP_AGENT_INDEX, reward_node)  
+    #         total_P_F += step['forward_prob']
+    #         total_P_B += step['backward_prob']
+    #         #total_reward += torch.tensor(gflowfigure8._step_reward_test())
+    #         total_reward += step['step_reward']
 
-        logZ = gflowfigure8.sampler.logZ
-        # TODO find more elegant solution to nan issue
-        clipped_reward = torch.log(torch.tensor(total_reward).clip(0)).clip(-20)
-        loss = (logZ + total_P_F - clipped_reward - total_P_B).pow(2)
+    #     logZ = gflowfigure8.sampler.logZ
+    #     # TODO find more elegant solution to nan issue
+    #     clipped_reward = torch.log(torch.tensor(total_reward).clip(0)).clip(-20)
+    #     loss = (logZ + total_P_F - clipped_reward - total_P_B).pow(2)
 
-        minibatch_loss += loss
-        minibatch_reward += clipped_reward
-        minibatch_z += logZ
-        minibatch_pf += total_P_F
-        minibatch_pb += total_P_B
+    #     minibatch_loss += loss
+    #     minibatch_reward += clipped_reward
+    #     minibatch_z += logZ
+    #     minibatch_pf += total_P_F
+    #     minibatch_pb += total_P_B
 
-        if (episode + 1) % BATCH_SIZE == 0:
-            if WANDB:
-                wandb.log({
-                    "loss": minibatch_loss/BATCH_SIZE, 
-                    "reward":  minibatch_reward/BATCH_SIZE,
-                    "pf": minibatch_pf/BATCH_SIZE,
-                    "pb": minibatch_pb/BATCH_SIZE,
-                    "z": minibatch_z/BATCH_SIZE
-                    })
-                # for name, param in sampler.named_parameters():
-                #     wandb.log({f"{name}_mean": param.data.mean().item(), f"{name}_std": param.data.std().item()})
+    #     if (episode + 1) % BATCH_SIZE == 0:
+    #         if WANDB:
+    #             wandb.log({
+    #                 "loss": minibatch_loss/BATCH_SIZE, 
+    #                 "reward":  minibatch_reward/BATCH_SIZE,
+    #                 "pf": minibatch_pf/BATCH_SIZE,
+    #                 "pb": minibatch_pb/BATCH_SIZE,
+    #                 "z": minibatch_z/BATCH_SIZE
+    #                 })
+    #             # for name, param in sampler.named_parameters():
+    #             #     wandb.log({f"{name}_mean": param.data.mean().item(), f"{name}_std": param.data.std().item()})
             
-            minibatch_loss.backward(retain_graph=True)
-            optimizer.step()
-            optimizer.zero_grad()
-            minibatch_loss = 0
-            minibatch_reward = 0
-            minibatch_z = 0 
-            minibatch_pf = 0 
-            minibatch_pb = 0 
+    #         minibatch_loss.backward(retain_graph=True)
+    #         optimizer.step()
+    #         optimizer.zero_grad()
+    #         minibatch_loss = 0
+    #         minibatch_reward = 0
+    #         minibatch_z = 0 
+    #         minibatch_pf = 0 
+    #         minibatch_pb = 0 
 
-    torch.save(gflowfigure8, f'{run_name}.pt')
+    # torch.save(gflowfigure8, f'{run_name}.pt')
 
 def separate_args(config):
     organized_config = {
@@ -198,7 +198,7 @@ def parse_arguments():
     
     # Custom Model Config Arguments
     parser.add_argument('--custom_model', type=str, default='attn_fcn')
-    parser.add_argument('--reward', type=str, default='complex')
+    parser.add_argument('--reward', type=str, default='random_region')
     parser.add_argument('--embedding', type=str, default='coordinate')
     parser.add_argument('--nred', type=int, default=1)
     parser.add_argument('--nblue', type=int, default=1)

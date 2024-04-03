@@ -346,7 +346,7 @@ class SamplerAttnFCN(nn.Module):
         #self.reward_nodes = [2]
 
         adj_matrix = torch.tensor(nx.adjacency_matrix(self.map.g_acs).toarray(), device=self.device)
-        self.adj_matrix = adj_matrix.reshape((27, 27, 1))
+        self.adj_matrix = adj_matrix.reshape((15, 15, 1))
 
         if self.embedding == "number":
             in_features = self_size

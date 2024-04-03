@@ -109,7 +109,7 @@ class GlowFigure8Squad():
             )
         elif sampler_config['custom_model_config']['custom_model'] == 'attn_fcn':
             self.sampler = SamplerAttnFCN(
-                self_size=27,
+                self_size=15,
                 num_hiddens_action=512,
                 num_outputs_action=15,
                 out_features=28,
@@ -208,8 +208,6 @@ class GlowFigure8Squad():
 
         action_penalty_red = self._take_action_red(action)
         self._take_action_blue()
-        # ??? UPDATE TWICE
-        # R_engage_B, B_engage_R, R_overlay = self._update()
         self.agent_interaction(R_engage_B, B_engage_R)
 
         if self.reward_type == 'complex':
@@ -644,7 +642,8 @@ class GlowFigure8Squad():
             route_len = self.routes[_route].get_route_length()
             self.routes[_route].list_node = [0] * route_len
             for _idx in range(route_len):
-                self.routes[_route].list_node[_idx] = self.map.get_index_by_name(self.routes[_route].list_code[_idx])
+                index_by_name = self.map.get_index_by_name(self.routes[_route].list_code[_idx])
+                self.routes[_route].list_node[_idx] = index_by_name
             list_dir = [0] * (route_len - 1)
             for _idx in range(route_len - 1):
                 list_dir[_idx] = self.map.get_edge_attr_acs_by_idx(self.routes[_route].list_node[_idx],
@@ -678,10 +677,10 @@ class GlowFigure8Squad():
         for idx, init_red in enumerate(self.configs["init_red"]):
             r_eval_start_pos = self.n_eval_episodes if self.in_eval else None
             # TODO: Fix this
-            # r_code = env_setup.get_default_red_encoding(idx, init_red["pos"], r_eval_start_pos)
-            r_code = '11_0100' #env_setup.get_default_red_encoding(idx, 25, r_eval_start_pos)
+            r_code = '00_0011' #env_setup.get_default_red_encoding(idx, init_red["pos"], r_eval_start_pos)
+            #r_code = '11_0100' #env_setup.get_default_red_encoding(idx, 25, r_eval_start_pos)
             # why is this so complicated???
-            r_node = 25 # self.map.get_index_by_name(r_code)
+            r_node = 6 #self.map.get_index_by_name(r_code)
             r_dir = env_setup.get_default_dir(init_red["dir"])
             self.team_red[idx].reset(_node=r_node, _code=r_code, _dir=r_dir, _health=HP_red)
 
