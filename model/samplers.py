@@ -328,6 +328,7 @@ class SamplerAttnFCN(nn.Module):
         n_heads,
         map,
         embedding,
+        is_dynamic_embedding,
         **kwargs
     ):
         nn.Module.__init__(self)
@@ -340,6 +341,7 @@ class SamplerAttnFCN(nn.Module):
         self.out_features = out_features
         self.n_heads = n_heads
         self.embedding = embedding
+        self.is_dynamic_embedding = is_dynamic_embedding
         self.map = map
 
         # acurate???
@@ -414,7 +416,8 @@ class SamplerAttnFCN(nn.Module):
         x = self.output(x, self.adj_matrix)
 
         # TODO: Examine and fix
-        self.dynamic_embedding = x.clone()
+        if self.is_dynamic_embedding:
+            self.dynamic_embedding = x.clone()
 
         bool_obs = obs.bool()[0]
         cur_node = utils.get_loc(bool_obs, self.self_size) + 1

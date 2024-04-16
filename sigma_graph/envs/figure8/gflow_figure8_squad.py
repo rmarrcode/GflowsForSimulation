@@ -76,6 +76,7 @@ class GlowFigure8Squad():
         self.reward_type = sampler_config['custom_model_config']['reward']
         self.custom_model = sampler_config['custom_model_config']['custom_model']
         self.embedding = sampler_config['custom_model_config']['embedding']
+        self.is_dynamic_embedding = sampler_config['custom_model_config']['is_dynamic_embedding']
 
         if sampler_config['custom_model_config']['custom_model'] == 'gnn':
             self.sampler = SamplerGNN(
@@ -117,7 +118,8 @@ class GlowFigure8Squad():
                 map=self.map,
                 nred=sampler_config['custom_model_config']['nred'],
                 nblue=sampler_config['custom_model_config']['nblue'],
-                embedding = self.embedding
+                embedding = self.embedding,
+                is_dynamic_embedding = self.is_dynamic_embedding
             )
         
     def reset(self, force=False):
@@ -165,25 +167,12 @@ class GlowFigure8Squad():
     # update observation
     def step(self, a_id, reward_nodes):
 
-        # make n actions
-
-        # revisit
-        # if self._get_step_done():
-        #     return {
-        #         'done': True
-        #     }
-
-        # self._reset_agents()
-
         node = self.team_red[0].get_info()["node"]
 
         prev_obs = self._log_step_prev()
         self.step_counter += 1
-        # ??? UPDATE TWICE
-        # self._update()
         R_engage_B, B_engage_R, R_overlay = self._update()
 
-        # prev_obs = [self.states[a_id],]
         probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
                                               reward_nodes=reward_nodes)
 
@@ -198,9 +187,7 @@ class GlowFigure8Squad():
 
         # TODO check if backward action is its own thing
         probs_backward = self.sampler.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
-        #(backward_prob, _) = self.probs_to_action(probs_backward)
         backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
-
         flow = self.sampler.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
 
         # update log
