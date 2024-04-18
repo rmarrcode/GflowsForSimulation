@@ -71,6 +71,7 @@ class GlowFigure8Squad():
                                                     for _ in range(len(self.learning_agent))])
         self.obs = [[] for _ in range(len(self.learning_agent))]
         self.states = [[] for _ in range(len(self.learning_agent))]
+        self.start_node = sampler_config['custom_model_config']['start_node']
         #self.positions = [[] for _ in range(len(self.learning_agent))]
 
         self.reward_type = sampler_config['custom_model_config']['reward']
@@ -110,7 +111,7 @@ class GlowFigure8Squad():
             )
         elif sampler_config['custom_model_config']['custom_model'] == 'attn_fcn':
             self.sampler = SamplerAttnFCN(
-                self_size=15,
+                self_size=27,
                 num_hiddens_action=512,
                 num_outputs_action=15,
                 out_features=28,
@@ -663,11 +664,14 @@ class GlowFigure8Squad():
         HP_red = self.configs["init_health_red"]
         for idx, init_red in enumerate(self.configs["init_red"]):
             r_eval_start_pos = self.n_eval_episodes if self.in_eval else None
+
+            r_node = self.start_node
             # TODO: Fix this
-            r_code = '00_0011' #env_setup.get_default_red_encoding(idx, init_red["pos"], r_eval_start_pos)
+            r_code = env_setup.get_default_red_encoding_simple(r_node)
+            #print(f'r_node {r_node}')
+            #print(f'r_code {r_code}')
             #r_code = '11_0100' #env_setup.get_default_red_encoding(idx, 25, r_eval_start_pos)
             # why is this so complicated???
-            r_node = 6 #self.map.get_index_by_name(r_code)
             r_dir = env_setup.get_default_dir(init_red["dir"])
             self.team_red[idx].reset(_node=r_node, _code=r_code, _dir=r_dir, _health=HP_red)
 

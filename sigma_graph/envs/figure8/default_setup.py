@@ -14,7 +14,7 @@ ACT_MASKED = {
 INIT_AGENT_RED = {"learn": True, "pos": 6, "dir": None}
 INIT_AGENT_BLUE = {"learn": False, "route": "0", "idx": 0}
 INIT_CONFIGS = {
-    "env_path": './', "map_id": 'XS', "load_pickle": True,
+    "env_path": './', "map_id": 'S', "load_pickle": True,
     "init_red": INIT_AGENT_RED, "init_blue": None, "init_health_red": 10, "init_health_blue": 100, "damage_maximum": 5,
     "fixed_start": 5
 }
@@ -64,6 +64,18 @@ def get_default_red_encoding(red_id=0, red_pos=None, forced_start_pos=None) -> s
         idx = forced_start_pos % len(pos_red_pool)
     R_pos = pos_red_pool[idx]
     return get_node_name_from_pos_abs(R_pos)
+
+def get_default_red_encoding_simple(red_pos):
+    encodings = {'00_0000': 1, '01_0011': 2, '00_0001': 3, '00_0010': 4, '01_0100': 5,
+                 '00_0011': 6, '00_0100': 7, '01_0101': 8, '00_0101': 9, '00_0110': 10,
+                 '01_0110': 11, '10_0011': 12, '10_0100': 13, '10_0101': 14, '10_0110': 15,
+                 '01_0111': 16, '10_0111': 17, '11_0011': 18, '11_0101': 19, '11_0111': 20,
+                 '11_1001': 21, '11_1010': 22, '10_1000': 23, '11_1011': 24, '11_0100': 25,
+                 '11_0110': 26, '11_1000': 27}
+    for key in encodings:
+        if encodings[key] == red_pos:
+            return key
+    return -1
 
 
 # update agent looking direction. return value: int direction indicator
