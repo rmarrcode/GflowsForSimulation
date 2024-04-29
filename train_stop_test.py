@@ -75,12 +75,12 @@ def convert_discrete_action_to_multidiscrete(action):
 
 config = {
     "custom_model_config": {
-        "custom_model": "attn_fcn", #fcn #attn_fcn
+        "custom_model": "fcn", #fcn #attn_fcn
         "reward": "single", #random_region random single complex
         "reward_interval": "step", #trajectory 
         "trajectory_per_reward": 1,
         "embedding": "coordinate", #number #coordinate
-        "is_dynamic_embedding": True,
+        "is_dynamic_embedding": False,
         "nred": 1,
         "nblue": 1,
         "start_node": 22,
@@ -167,7 +167,8 @@ while episode <= NUM_EPOCHS:
   elif config['custom_model_config']['reward'] == 'complex':
     reward_node = []
   
-  gflowfigure8.update_reward(reward_node)
+  if config['custom_model_config']['is_dynamic_embedding']:  
+    gflowfigure8.update_reward(reward_node)
   no_trajectory = config['custom_model_config']['trajectory_per_reward']
 
   for trajectory in range(no_trajectory):

@@ -28,6 +28,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class GlowFigure8Squad():
     def __init__(self, sampler_config, max_step=40, n_red=1, n_blue=1):#, **kwargs):
+        self.sampler_config = sampler_config
         # setup configs
         self.max_step = max_step
         self.num_red = n_red
@@ -174,8 +175,11 @@ class GlowFigure8Squad():
         self.step_counter += 1
         R_engage_B, B_engage_R, R_overlay = self._update()
 
-        probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
-                                              reward_nodes=reward_nodes)
+        if self.sampler_config['custom_model_config']['custom_model'] == 'fcn':
+            probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        else:
+            probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
+                                                reward_nodes=reward_nodes)
 
         # TODO fix this
         cat = Categorical(logits=probs_forward)
