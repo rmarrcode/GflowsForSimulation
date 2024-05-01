@@ -450,27 +450,34 @@ class SamplerFCN(nn.Module):
         self,
         self_size,
         num_hiddens,
-        num_outputs
+        num_outputs,
+        embedding,
+        trajectory_length,
+        map
     ):
+        nn.Module.__init__(self)
+
         self.self_size = self_size
         self.num_hiddens = num_hiddens
         self.num_outputs = num_outputs
+        self.map = map
+        self.embedding = embedding
+        self.trajectory_length = trajectory_length
 
-        nn.Module.__init__(self)
+        self.mlp_forward = nn.Sequential(
+                                nn.Linear((self.self_size+trajectory_length), num_hiddens, dtype=float),
+                                nn.LeakyReLU(),
+                                nn.Linear(num_hiddens, num_outputs, dtype=float))
+        self.mlp_backward = nn.Sequential(
+                                nn.Linear((self.self_size+trajectory_length), num_hiddens, dtype=float), 
+                                nn.LeakyReLU(),
+                                nn.Linear(num_hiddens, num_outputs, dtype=float))
+        
+        self.logZ = nn.Parameter(torch.ones(1))
 
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-
-        self.mlp_forward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float),
-                                 nn.LeakyReLU(),
-                                 nn.Linear(num_hiddens, num_outputs, dtype=float))
-        self.mlp_backward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float), 
-                                 nn.LeakyReLU(),
-                                 nn.Linear(num_hiddens, num_outputs, dtype=float))
-        
-        self.logZ = nn.Parameter(torch.ones(1))
-
         self.to(self.device)
 
     def convert_discrete_action_to_multidiscrete(self, action):
@@ -479,23 +486,58 @@ class SamplerFCN(nn.Module):
     def forward(
         self,
         obs,
+        step_counter
     ):
-        self_size = self.self_size
-        self_obs = obs[0][:self_size].double()
-        probs = self.mlp_forward(self_obs)
-        #probs = torch.nn.functional.log_softmax(features, dim=0)
+        bool_obs = obs.bool()[0]
+        # map size variable
+        cur_node = utils.get_loc(bool_obs, 27) + 1
+        if self.embedding == "number":
+            embedding = torch.cat(
+                    (   
+                        F.one_hot(torch.tensor(cur_node, device=self.device), self.self_size),
+                        #F.one_hot(self.trajectory_length, step_counter)
+                    ), dim=0
+                )
+
+        # focusing on fig 8 for now where there is no reward node
+        elif self.embedding == "coordinate":
+            embedding = torch.cat(
+                        (
+                            torch.tensor([self.map.n_info[cur_node][0], self.map.n_info[cur_node][1]], dtype=float, device=self.device),
+                            F.one_hot(torch.tensor(step_counter, device=self.device), self.trajectory_length)
+                        ), dim=0
+                    )
+
+        probs = self.mlp_forward(embedding)
 
         return probs
     
     def backward(
         self,
         obs,
+        step_counter
     ):
         
-        self_size = self.self_size
-        self_obs = obs[0][:self_size].double()
-        probs = self.mlp_backward(self_obs)
-        #probs = torch.nn.functional.log_softmax(features, dim=0)
+        bool_obs = obs.bool()[0]
+        cur_node = utils.get_loc(bool_obs, 27) + 1
+        if self.embedding == "number":
+            embedding = torch.cat(
+                    (   
+                        F.one_hot(torch.tensor(cur_node, device=self.device), self.self_size),
+                        F.one_hot(self.trajectory_length, step_counter)
+                    ), dim=0
+                )
+
+        # focusing on fig 8 for now where there is no reward
+        elif self.embedding == "coordinate":
+            embedding = torch.cat(
+                        (
+                            torch.tensor([self.map.n_info[cur_node][0], self.map.n_info[cur_node][1]],dtype=float, device=self.device),
+                            F.one_hot(torch.tensor(step_counter, device=self.device), self.trajectory_length)
+                        ), dim=0
+                    )
+
+        probs = self.mlp_backward(embedding)
 
         return probs
     

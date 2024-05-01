@@ -100,9 +100,12 @@ class GlowFigure8Squad():
             )
         elif sampler_config['custom_model_config']['custom_model'] == 'fcn':
             self.sampler = SamplerFCN(
-                self_size=27,
+                self_size=2,
                 num_hiddens=512,
-                num_outputs=15
+                num_outputs=15,
+                embedding=sampler_config['custom_model_config']['embedding'],
+                trajectory_length=sampler_config['custom_model_config']['trajectory_length'],
+                map=self.map
             )
         elif sampler_config['custom_model_config']['custom_model'] == 'gnn_custom':
             self.sampler = SamplerGCNCustom(
@@ -172,11 +175,12 @@ class GlowFigure8Squad():
         node = self.team_red[0].get_info()["node"]
 
         prev_obs = self._log_step_prev()
-        self.step_counter += 1
+        
         R_engage_B, B_engage_R, R_overlay = self._update()
 
         if self.sampler_config['custom_model_config']['custom_model'] == 'fcn':
-            probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+            probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
+                                                 self.step_counter)
         else:
             probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
                                                 reward_nodes=reward_nodes)
@@ -191,7 +195,13 @@ class GlowFigure8Squad():
         action = [action]
 
         # TODO check if backward action is its own thing
-        probs_backward = self.sampler.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        if self.sampler_config['custom_model_config']['custom_model'] == 'fcn':
+            probs_backward = self.sampler.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
+                                                 self.step_counter)
+        else:
+            probs_backward = self.sampler.backward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
+                                                reward_nodes=reward_nodes)
+            
         backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
         flow = self.sampler.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
 
@@ -200,7 +210,10 @@ class GlowFigure8Squad():
 
         action_penalty_red = self._take_action_red(action)
         self._take_action_blue()
+        R_engage_B, B_engage_R, R_overlay = self._update()
         self.agent_interaction(R_engage_B, B_engage_R)
+
+        self.step_counter += 1
 
         if self.reward_type == 'complex':
             step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]            
