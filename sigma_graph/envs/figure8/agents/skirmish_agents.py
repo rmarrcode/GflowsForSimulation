@@ -58,5 +58,15 @@ class AgentBlue(MAgent):
         self.route_idx = _idx
         super().set_location(_node, _code, _dir)
 
+    def get_info(self):
+        return ({
+            "uid": self.agent_id,
+            "node": self.agent_node,
+            "code": self.agent_code,
+            "dir": self.agent_dir,
+            "health": self.health,
+            "learn": self.learnable,
+        })
+
     def close(self):
         pass

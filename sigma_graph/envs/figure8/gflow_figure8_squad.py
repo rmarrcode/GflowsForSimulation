@@ -172,7 +172,8 @@ class GlowFigure8Squad():
     # update observation
     def step(self, a_id, reward_nodes):
 
-        node = self.team_red[0].get_info()["node"]
+        red_node = self.team_red[0].get_info()["node"]
+        blue_node = self.team_blue[0].get_info()["node"]
 
         prev_obs = self._log_step_prev()
         
@@ -229,7 +230,8 @@ class GlowFigure8Squad():
             'flow': flow,
             'action': action,
             'step_reward': step_reward,
-            'node': node,
+            'red_node': red_node,
+            'blue_node': blue_node
         })
     
 
