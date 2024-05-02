@@ -11,6 +11,7 @@ from tqdm import tqdm
 from datetime import datetime
 import matplotlib.pyplot as pp
 import numpy as np
+from ipywidgets import interact, IntSlider, fixed
 
 from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP, TURN_90_LOOKUP
 from sigma_graph.envs.figure8.default_setup import OBS_TOKEN
@@ -34,7 +35,7 @@ import matplotlib.pyplot as plt
 
 NUM_EPOCHS = 100000
 # default = 34
-BATCH_SIZE = 100
+BATCH_SIZE = 50
 LEARNING_RATE = 3e-4
 WANDB = True
 
@@ -183,15 +184,16 @@ while episode <= NUM_EPOCHS:
       total_P_F += step['forward_prob']
       total_P_B += step['backward_prob']
       total_reward += step['step_reward']
-      trajectory_path.append(step['node'])
+      trajectory_path.append(step['red_node'])
       action_path.append(step['action'])
 
     logZ = gflowfigure8.sampler.logZ
     # TODO find more elegant solution to nan issue
     if config['custom_model_config']['reward'] == 'complex':
-      total_reward += gflowfigure8._episode_rewards()[0]
+      episode_reward = gflowfigure8._episode_rewards_aggressive()[0]
+      total_reward += episode_reward
       # maybe +100 is not good
-      clipped_reward = torch.log(torch.tensor(total_reward+100)).clip(-20)
+      clipped_reward = torch.log(torch.tensor(total_reward)).clip(-20)
 
     # clipped_reward = torch.log(torch.tensor(end_rewards)).clip(-20)
 
@@ -231,5 +233,40 @@ while episode <= NUM_EPOCHS:
 # In[ ]:
 
 
-torch.save(gflowfigure8, f'{run_name}.pt')
+torch.save(gflowfigure8, f'models/{run_name}.pt')
+
+
+# In[ ]:
+
+
+gflowfigure8.reset()
+red_path = []
+blue_path = []
+for r in range(34):   
+    step = gflowfigure8.step(0, [])
+    red_path.append(step['red_node'])
+    blue_path.append(step['blue_node'])
+print((red_path))
+print((blue_path))
+
+
+# In[ ]:
+
+
+map_info, _ = load_graph_files(map_lookup="S")
+col_map = ["gold"] * len(map_info.n_info)
+
+def display_graph(index):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cur_col_map = col_map[:]
+    cur_col_map[red_path[index]-1] = "red"
+    cur_col_map[blue_path[index]-1] = "blue"
+    nx.draw_networkx(map_info.g_acs, pos=map_info.n_info, node_color=cur_col_map, edge_color="blue", arrows=True, ax=ax)
+    ax.set_title(f"Graph {index}")
+    plt.axis('off')
+    plt.show()
+
+# Create an interactive widget to display different graphs
+slider = IntSlider(min=0, max=33, step=1, value=0, description='Graph Index')
+interact(display_graph, index=slider)
 

@@ -11,7 +11,7 @@ from sigma_graph.data.data_helper import get_emb_from_name
 #from sigma_graph.envs.utils.multiagent_space import ActionSpaces, ObservationSpaces
 from ..utils.multiagent_space import ActionSpaces, ObservationSpaces
 from .agents.skirmish_agents import AgentRed, AgentBlue
-from .rewards.rewards_simple import get_step_engage, get_step_overlay, get_episode_reward_agent
+from .rewards.rewards_simple import get_step_engage, get_step_overlay, get_episode_reward_agent, get_episode_reward_agent_agressive
 from . import default_setup as env_setup
 
 import gym
@@ -80,6 +80,13 @@ class GlowFigure8Squad():
         self.embedding = sampler_config['custom_model_config']['embedding']
         self.is_dynamic_embedding = sampler_config['custom_model_config']['is_dynamic_embedding']
 
+        self.sampler_fcn_simple = SamplerFCNSimple(
+            num_hiddens=512,
+            num_outputs=15,
+            embedding=sampler_config['custom_model_config']['embedding'],
+            map=self.map
+        )
+
         if sampler_config['custom_model_config']['custom_model'] == 'gnn':
             self.sampler = SamplerGNN(
                 obs_space=self.__observation_space,
@@ -98,16 +105,7 @@ class GlowFigure8Squad():
                 layernorm=sampler_config['custom_model_config']['layernorm'],
                 activation=torch.nn.functional.log_softmax
             )
-        elif sampler_config['custom_model_config']['custom_model'] == 'fcn':
-            self.sampler = SamplerFCN(
-                self_size=2,
-                num_hiddens=512,
-                num_outputs=15,
-                embedding=sampler_config['custom_model_config']['embedding'],
-                trajectory_length=sampler_config['custom_model_config']['trajectory_length'],
-                map=self.map
-            )
-        elif sampler_config['custom_model_config']['custom_model'] == 'gnn_custom':
+        if sampler_config['custom_model_config']['custom_model'] == 'gnn_custom':
             self.sampler = SamplerGCNCustom(
                 map=self.map,
                 nred=sampler_config['custom_model_config']['nred'],
@@ -179,7 +177,7 @@ class GlowFigure8Squad():
         
         R_engage_B, B_engage_R, R_overlay = self._update()
 
-        if self.sampler_config['custom_model_config']['custom_model'] == 'fcn':
+        if self.sampler_config['custom_model_config']['custom_model'] == 'complex':
             probs_forward = self.sampler.forward(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device),
                                                  self.step_counter)
         else:
@@ -217,7 +215,8 @@ class GlowFigure8Squad():
         self.step_counter += 1
 
         if self.reward_type == 'complex':
-            step_reward = self._step_rewards(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0]            
+            step_reward = self._step_rewards_aggresssive(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0] 
+            #print(f'step_reward {step_reward}')
         else:
             step_reward = self._step_reward_test(reward_nodes)
 
@@ -234,6 +233,49 @@ class GlowFigure8Squad():
             'blue_node': blue_node
         })
     
+    def step_fcn_simple(self, a_id, reward_nodes):
+
+        red_node = self.team_red[0].get_info()["node"]
+
+        prev_obs = self._log_step_prev()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+
+        obs = torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device)
+        probs_forward = self.sampler_fcn_simple.forward(obs)
+
+        # TODO fix this
+        cat = Categorical(logits=probs_forward)
+        discrete_action = cat.sample()
+        forward_prob = cat.log_prob(discrete_action)
+        action = self.convert_discrete_action_to_multidiscrete(discrete_action)
+        action[0] = action[0].cpu().tolist()
+        action[1] = action[1].cpu().tolist()
+        action = [action]
+
+        # TODO check if backward action is its own thing
+        probs_backward = self.sampler_fcn_simple.backward(obs)
+        backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
+
+        flow = self.sampler_fcn_simple.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+
+        # update log
+        self._log_step_update(prev_obs, [action,], [0,])
+
+        action_penalty_red = self._take_action_red(action)
+        self._take_action_blue()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+        self.agent_interaction(R_engage_B, B_engage_R)
+
+        self.step_counter += 1
+
+        return ({
+            'done': False,
+            'forward_prob': forward_prob,
+            'backward_prob': backward_prob,
+            'flow': flow,
+            'action': action,
+            'red_node': red_node,
+        })
 
 
     def step_simple(self, a_id):
@@ -476,7 +518,6 @@ class GlowFigure8Squad():
         # TODO: Revisit
         # if self.rewards["step"]["reward_step_on"] is False:
         #     return rewards
-        
         for agent_r in range(self.num_red):
             rewards[agent_r] += get_step_overlay(R_overlay[agent_r], **self.rewards["step"])
             for agent_b in range(self.num_blue):
@@ -485,6 +526,17 @@ class GlowFigure8Squad():
                                                     team_switch=False, **self.rewards["step"])
         return rewards
     
+    def _step_rewards_aggresssive(self, penalties, R_engage_B, B_engage_R, R_overlay):
+        rewards_aggressive = {'reward_step_on': True, 'red_2_blue': 4, 'blue_2_red': 0, 'red_overlay': 0}
+        rewards = penalties
+        for agent_r in range(self.num_red):
+            rewards[agent_r] += get_step_overlay(R_overlay[agent_r], **rewards_aggressive)
+            for agent_b in range(self.num_blue):
+                rewards[agent_r] += get_step_engage(r_engages_b=R_engage_B[agent_r, agent_b],
+                                                    b_engages_r=B_engage_R[agent_b, agent_r],
+                                                    team_switch=False, **rewards_aggressive)
+        return rewards
+
     def _step_reward_test(self, reward_nodes):
         reward = 0
         for red_i in range(self.num_red):
@@ -499,7 +551,6 @@ class GlowFigure8Squad():
     def _episode_rewards_test(self, trajectory):
         return trajectory.rewards.sum()
 
-    # full 20 steps
     def _episode_rewards(self):
         # gather final states
         _HP_full_r = self.configs["init_health_red"]
@@ -524,6 +575,32 @@ class GlowFigure8Squad():
                                                              _threshold_r, _threshold_b, _damage_cost_r[agent_r],
                                                              _end_step_b[agent_b], **self.rewards["episode"])
         return rewards
+    
+    def _episode_rewards_aggressive(self):
+        # gather final states
+        _HP_full_r = self.configs["init_health_red"]
+        _HP_full_b = self.configs["init_health_blue"]
+        _threshold_r = self.configs["threshold_damage_2_red"]
+        _threshold_b = self.configs["threshold_damage_2_blue"]
+
+        _health_lost_r = [_HP_full_r - self.team_red[_r].get_health() for _r in range(self.num_red)]
+        _damage_cost_r = [self.team_red[_r].damage_total() for _r in range(self.num_red)]
+        _health_lost_b = [_HP_full_b - self.team_blue[_b].get_health() for _b in range(self.num_blue)]
+        _end_step_b = [self.team_blue[_b].get_end_step() for _b in range(self.num_blue)]
+
+        rewards = [0] * self.num_red
+        if self.rewards["episode"]["reward_episode_on"] is False:
+            return rewards
+        # If any Red agent got terminated, the whole team would not receive the episode rewards
+        if any([_health_lost_r[_r] > _threshold_r for _r in range(self.num_red)]):
+            return rewards
+        for agent_r in range(self.num_red):
+            for agent_b in range(self.num_blue):
+                rewards[agent_r] += get_episode_reward_agent_agressive(_health_lost_r[agent_r], _health_lost_b[agent_b],
+                                                             _threshold_r, _threshold_b, _damage_cost_r[agent_r],
+                                                             _end_step_b[agent_b], **self.rewards["episode"])
+        return rewards
+
 
     def _get_step_done(self):
         # reach to max_step

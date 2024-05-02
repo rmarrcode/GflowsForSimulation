@@ -56,6 +56,21 @@ def get_episode_reward_agent(health_lost_self, health_lost_opponent, threshold_s
 
     return episode_reward
 
+def get_episode_reward_agent_agressive(health_lost_self, health_lost_opponent, threshold_self, threshold_opponent,
+                             damage_cost_self=0, end_step_opponent=-1, **rewards):
+    assert len(rewards), "No episode rewards provided.."
+    episode_reward = 0
+    # discourage free loaders
+    # if damage_cost_self == 0:
+    #     return episode_reward
+
+    threshold_offset = rewards["soft_bound"]["dist"][-1] if rewards["episode_decay_soft"] is True else 0
+    # give rewards for terminating the opponent agent
+    if health_lost_opponent >= threshold_opponent - threshold_offset:
+        # health based reward for surviving
+        episode_reward += get_reward_type(health_lost_self, **rewards["health_lookup"])
+
+    return episode_reward
 
 def get_reward_type(value, **_dict):
     _reward = 0

@@ -62,9 +62,6 @@ def load_graph_files(env_path="./", map_lookup="S", route_lookup=["0"], is_pickl
     path_data = os.path.join(env_path, PATH_LOOKUP["saved"])
     # TODO: Fix
     # This is not good and only temporary
-    print('---------------')
-    print(f'path_data {path_data}')
-    print(os.getcwd())
     #path_data = '/Users/ryanmarr/Documents/CognArch/GflowsForSimulation/sigma_graph/data/parsed/'
     path_data = '/home/rmarr/Documents/GflowsForSimulation_env/GflowsForSimulation/sigma_graph/data/parsed/'
     assert check_dir(path_data), "[GymEnv][Error] Can not find data in: \'{}\'".format(path_data)
