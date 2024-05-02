@@ -233,7 +233,7 @@ class GlowFigure8Squad():
             'blue_node': blue_node
         })
     
-    def step_fcn_simple(self, a_id, reward_nodes):
+    def step_fcn_simple(self, a_id):
 
         red_node = self.team_red[0].get_info()["node"]
 
@@ -256,7 +256,7 @@ class GlowFigure8Squad():
         probs_backward = self.sampler_fcn_simple.backward(obs)
         backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
 
-        flow = self.sampler_fcn_simple.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        flow = self.sampler_fcn_simple.flow(obs)
 
         # update log
         self._log_step_update(prev_obs, [action,], [0,])
