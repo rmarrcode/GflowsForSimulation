@@ -447,39 +447,29 @@ class SamplerAttnFCN(nn.Module):
 class SamplerFCNSimple(nn.Module):
     def __init__(
         self,
+        self_size,
         num_hiddens,
-        num_outputs,
-        embedding,
-        map
+        num_outputs
     ):
-        nn.Module.__init__(self)
-
-        if embedding == "coordinate":
-            self.embedding_size = 2
-        elif embedding == "number":
-            self.embedding_size = 27
-
-        print(self.embedding_size)
-
+        self.self_size = self_size
         self.num_hiddens = num_hiddens
         self.num_outputs = num_outputs
-        self.map = map
-        self.embedding = embedding
 
-        self.mlp_forward = nn.Sequential(
-                                nn.Linear(self.embedding_size, num_hiddens, dtype=float),
-                                nn.LeakyReLU(),
-                                nn.Linear(num_hiddens, num_outputs, dtype=float))
-        self.mlp_backward = nn.Sequential(
-                                nn.Linear(self.embedding_size, num_hiddens, dtype=float), 
-                                nn.LeakyReLU(),
-                                nn.Linear(num_hiddens, num_outputs, dtype=float))
-        
-        self.logZ = nn.Parameter(torch.ones(1))
+        nn.Module.__init__(self)
 
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
+
+        self.mlp_forward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float),
+                                 nn.LeakyReLU(),
+                                 nn.Linear(num_hiddens, num_outputs, dtype=float))
+        self.mlp_backward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float), 
+                                 nn.LeakyReLU(),
+                                 nn.Linear(num_hiddens, num_outputs, dtype=float))
+        
+        self.logZ = nn.Parameter(torch.ones(1))
+
         self.to(self.device)
 
     def convert_discrete_action_to_multidiscrete(self, action):
@@ -489,17 +479,9 @@ class SamplerFCNSimple(nn.Module):
         self,
         obs,
     ):
-        bool_obs = obs.bool()[0]
-        # map size variable
-        # +1 needed?
-        cur_node = utils.get_loc(bool_obs, 27) + 1
-        if self.embedding == "number":
-            embedding = F.one_hot(torch.tensor(cur_node, device=self.device), self.self_size)
-        # focusing on fig 8 for now where there is no reward node
-        elif self.embedding == "coordinate":
-            embedding = torch.tensor([self.map.n_info[cur_node][0], self.map.n_info[cur_node][1]], dtype=float, device=self.device)
-
-        probs = self.mlp_forward(embedding)
+        self_size = self.self_size
+        self_obs = obs[0][:self_size].double()
+        probs = self.mlp_forward(self_obs)
 
         return probs
     
@@ -507,17 +489,10 @@ class SamplerFCNSimple(nn.Module):
         self,
         obs,
     ):
-        bool_obs = obs.bool()[0]
-        # map size variable
-        # +1 needed?
-        cur_node = utils.get_loc(bool_obs, 27) + 1
-        if self.embedding == "number":
-            embedding = F.one_hot(torch.tensor(cur_node, device=self.device), self.self_size)
-        # focusing on fig 8 for now where there is no reward node
-        elif self.embedding == "coordinate":
-            embedding = torch.tensor([self.map.n_info[cur_node][0], self.map.n_info[cur_node][1]], dtype=float, device=self.device)
-
-        probs = self.mlp_backward(embedding)
+        
+        self_size = self.self_size
+        self_obs = obs[0][:self_size].double()
+        probs = self.mlp_backward(self_obs)
 
         return probs
     

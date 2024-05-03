@@ -81,12 +81,10 @@ class GlowFigure8Squad():
         self.is_dynamic_embedding = sampler_config['custom_model_config']['is_dynamic_embedding']
 
         self.sampler_fcn_simple = SamplerFCNSimple(
+            self_size=27,
             num_hiddens=512,
             num_outputs=15,
-            embedding=sampler_config['custom_model_config']['embedding'],
-            map=self.map
         )
-
         if sampler_config['custom_model_config']['custom_model'] == 'gnn':
             self.sampler = SamplerGNN(
                 obs_space=self.__observation_space,
