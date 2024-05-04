@@ -253,70 +253,6 @@ class SamplerGNN(TMv2.TorchModelV2, nn.Module):
         prob = self._logits_flow(self._features_flow).log()
         
         return prob
-    
-    
-# class SamplerGCNCustom(MessagePassing):
-#     def __init__(self, map: MapInfo, in_node_channels=29, in_edge_channels=5, hidden_channels=32, out_channels=1, **kwargs):
-#         super(SamplerGCNCustom, self).__init__(aggr='add')  
-#         self.conv1 = nn.Conv2d(in_node_channels, hidden_channels, kernel_size=1)
-#         self.conv2 = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
-#         self.map = map
-#         self.num_red = kwargs["nred"]
-#         self.num_blue = kwargs["nblue"]
-#         self_shape, blue_shape, red_shape = env_setup.get_state_shapes(
-#             self.map.get_graph_size(),
-#             self.num_red,
-#             self.num_blue,
-#             env_setup.OBS_TOKEN,
-#         )
-#         self.obs_shapes = [
-#             self_shape,
-#             blue_shape,
-#             red_shape,
-#             self.num_red,
-#             self.num_blue,
-#         ]        
-#         self.in_node_channels = in_node_channels
-#         self.in_edge_channels = in_edge_channels
-#         self.hidden_channels = hidden_channels
-#         self.out_channels = out_channels
-
-#     def message(self, x_j):
-#         return x_j
-
-#     def forward(self, obs):
-        
-#         cur_node = utils.get_loc(obs, self.obs_shapes[0])
-#         # TODO make reward global
-#         reward_nodes = [10]
-
-#         g_acs = self.map.g_acs
-#         num_nodes = g_acs.number_of_nodes()
-#         num_edges = g_acs.number_of_edges()
-
-#         # do custom encoding
-#         # x = torch.randn(num_nodes, self.in_node_channels)
-#         # one hot position + agent presence + reward
-#         graph_node_embedding = torch.zeros(num_nodes, self.obs_shapes[0]+2)
-#         for node in num_nodes:
-#             if node == cur_node:
-#             elif node in reward_nodes:
-
-#         edge_list = list(g_acs.edges())
-#         edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
-#         edge_attr = torch.randn(num_edges, self.in_edge_channels)
-
-#         print(f'g_acs {g_acs.nodes}')
-#         print(f'edge_list {edge_list}')
-#         print(f'edge_index {edge_index}')
-#         print(f'edge_attr {edge_attr}')
-        
-#         edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))  
-#         x = F.relu(self.conv1(x))
-#         x = self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
-#         x = F.relu(self.conv2(x))
-
-#         return x
 
 class SamplerAttnFCN(nn.Module):
     def __init__(
@@ -447,28 +383,36 @@ class SamplerAttnFCN(nn.Module):
 class SamplerFCNSimple(nn.Module):
     def __init__(
         self,
-        self_size,
         num_hiddens,
-        num_outputs
+        num_outputs,
+        embedding,
+        map
     ):
-        self.self_size = self_size
-        self.num_hiddens = num_hiddens
-        self.num_outputs = num_outputs
-
         nn.Module.__init__(self)
 
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        self.num_hiddens = num_hiddens
+        self.num_outputs = num_outputs
+        self.embedding = embedding
+        self.map = map
 
-        self.mlp_forward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float),
+        if self.embedding == "coordinate":
+            self.embedding_size = 2
+        if self.embedding == "number":
+            self.embedding_size = 27
+
+        # is softmax needed for coordinate embedding
+        self.mlp_forward = nn.Sequential(nn.Linear(self.embedding_size, num_hiddens, dtype=float),
                                  nn.LeakyReLU(),
                                  nn.Linear(num_hiddens, num_outputs, dtype=float))
-        self.mlp_backward = nn.Sequential(nn.Linear(self_size, num_hiddens, dtype=float), 
+        self.mlp_backward = nn.Sequential(nn.Linear(self.embedding_size, num_hiddens, dtype=float), 
                                  nn.LeakyReLU(),
                                  nn.Linear(num_hiddens, num_outputs, dtype=float))
         
         self.logZ = nn.Parameter(torch.ones(1))
+
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
 
         self.to(self.device)
 
@@ -479,9 +423,17 @@ class SamplerFCNSimple(nn.Module):
         self,
         obs,
     ):
-        self_size = self.self_size
-        self_obs = obs[0][:self_size].double()
-        probs = self.mlp_forward(self_obs)
+        self_obs = obs[0][:27].double()
+        bool_obs = obs.bool()[0]
+        cur_node = utils.get_loc(bool_obs, 27)
+
+        if self.embedding == "number":
+            self.embedding = self_obs
+        elif self.embedding == "coordinate":
+            map_tensor = torch.tensor([self.map.n_info[cur_node][0], self.map.n_info[cur_node][1]], dtype=float, device=self.device)
+            self.embedding = map_tensor
+
+        probs = self.mlp_forward(self.embedding)
 
         return probs
     
@@ -489,7 +441,136 @@ class SamplerFCNSimple(nn.Module):
         self,
         obs,
     ):
+        self_obs = obs[0][:27].double()
+        bool_obs = obs.bool()[0]
+        cur_node = utils.get_loc(bool_obs, 27) + 1
+
+        if self.embedding == "number":
+            self.embedding = self_obs
+        elif self.embedding == "coordinate":
+            self.embedding = torch.tensor([self.map.n_info[cur_node][0], self.map.n_info[cur_node][1]], dtype=float, device=self.device)
+
+        probs = self.mlp_backward(self.embedding)
+
+        return probs
+    
+    def flow(
+        self,
+        obs,
+    ):
+        return 0
+
+class SamplerFig8CoordinateTime(nn.Module):    
+    def __init__(
+            self,
+            self_size,
+            num_hiddens_action,
+            num_outputs_action,
+            out_features,
+            n_heads,
+            map,
+            embedding,
+            **kwargs
+        ):
+            nn.Module.__init__(self)
+
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            self.self_size = self_size
+            self.num_hiddens_action = num_hiddens_action
+            self.num_outputs_action = num_outputs_action
+            self.out_features = out_features
+            self.n_heads = n_heads
+            self.embedding = embedding
+            self.map = map
+
+            # acurate???
+            #self.reward_nodes = [2]
+
+            adj_matrix = torch.tensor(nx.adjacency_matrix(self.map.g_acs).toarray(), device=self.device)
+            self.adj_matrix = adj_matrix.reshape((27, 27, 1))
+
+            if self.embedding == "number":
+                in_features = self_size
+            elif self.embedding == "coordinate":
+                in_features = 2
+
+            self.mlp_forward = nn.Sequential(
+                nn.Linear(in_features+2, num_hiddens_action, dtype=float),
+                nn.LeakyReLU(),
+                nn.Linear(num_hiddens_action, num_outputs_action, dtype=float))
+            self.mlp_backward = nn.Sequential(
+                nn.Linear(self_size, num_hiddens_action, dtype=float), 
+                nn.LeakyReLU(),
+                nn.Linear(num_hiddens_action, num_outputs_action, dtype=float))
+            
+            self.logZ = nn.Parameter(torch.ones(1))
+
+            n_hidden = 32 
+            dropout = 0.6
+            self.layer1 = GraphAttentionLayer(in_features+1, n_hidden, n_heads, is_concat=True, dropout=dropout)
+            self.activation = nn.ELU()
+            self.layer2 = GraphAttentionLayer(n_hidden, n_hidden, n_heads, is_concat=True, dropout=dropout)
+            self.output = GraphAttentionLayer(n_hidden, in_features+1, 1, is_concat=False, dropout=dropout)
+            self.dropout = nn.Dropout(dropout)
+            
+            self.to(self.device)
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+    def update_reward(self, reward_nodes):
+        if self.embedding == "number":
+            self.dynamic_embedding = torch.stack([
+                torch.cat(
+                    (   
+                        F.one_hot(torch.tensor(node, device=self.device), self.self_size),
+                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
+                    ), dim=0
+                )
+                for node in range(self.self_size)
+            ])  
+        elif self.embedding == "coordinate":
+            self.dynamic_embedding = torch.stack([
+                torch.cat(
+                    (   
+                        torch.tensor([self.map.n_info[node+1][0], self.map.n_info[node+1][1]], device=self.device),
+                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
+                    ), dim=0
+                )
+                for node in range(self.self_size)
+            ])  
+        else:
+            #TODO: throw some error 
+            pass
+
+        self.to(self.device)
+
+    def convert_discrete_action_to_multidiscrete(self, action):
+        return [action % len(local_action_move), action // len(local_action_move)]
+
+    def forward(self, obs, reward_nodes):
         
+        x = self.dropout(self.dynamic_embedding)
+        x = self.layer1(x, self.adj_matrix)
+        x = self.activation(x)
+        x = self.dropout(x)
+        x = self.layer2(x, self.adj_matrix)
+        x = self.activation(x)
+        x = self.output(x, self.adj_matrix)
+
+        bool_obs = obs.bool()[0]
+        cur_node = utils.get_loc(bool_obs, self.self_size) + 1
+
+        reward_nodes = torch.stack([torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device) for node in range(self.self_size)])
+        final_embeddings = torch.cat((self.dynamic_embedding, reward_nodes), dim=1)
+        probs = self.mlp_forward(final_embeddings[cur_node-1])
+
+        return probs
+
+    def backward(
+        self,
+        obs,
+    ):  
         self_size = self.self_size
         self_obs = obs[0][:self_size].double()
         probs = self.mlp_backward(self_obs)
@@ -512,11 +593,12 @@ class SamplerFCNFig8(nn.Module):
         map
     ):
         nn.Module.__init__(self)
-        print(f'embedding {embedding}')
-        if embedding == "coordinte":
+        if embedding == "coordinate":
             self.embedding_size = 2
-        elif embedding == "coordinte":
+        elif embedding == "number":
             self.embedding_size = 27
+
+        self.embedding_size += trajectory_length
 
         self.num_hiddens = num_hiddens
         self.num_outputs = num_outputs
@@ -525,11 +607,11 @@ class SamplerFCNFig8(nn.Module):
         self.trajectory_length = trajectory_length
 
         self.mlp_forward = nn.Sequential(
-                                nn.Linear((self.self_size), num_hiddens, dtype=float),
+                                nn.Linear(self.embedding_size, num_hiddens, dtype=float),
                                 nn.LeakyReLU(),
                                 nn.Linear(num_hiddens, num_outputs, dtype=float))
         self.mlp_backward = nn.Sequential(
-                                nn.Linear((self.self_size+trajectory_length), num_hiddens, dtype=float), 
+                                nn.Linear(self.embedding_size, num_hiddens, dtype=float), 
                                 nn.LeakyReLU(),
                                 nn.Linear(num_hiddens, num_outputs, dtype=float))
         
@@ -546,16 +628,16 @@ class SamplerFCNFig8(nn.Module):
     def forward(
         self,
         obs,
+        step_counter
     ):
+        self_obs = obs[0][:27].double()
         bool_obs = obs.bool()[0]
-        # map size variable
-        # +1 needed?
         cur_node = utils.get_loc(bool_obs, 27) + 1
         if self.embedding == "number":
             embedding = torch.cat(
                     (   
-                        F.one_hot(torch.tensor(cur_node, device=self.device), self.self_size),
-                        #F.one_hot(self.trajectory_length, step_counter)
+                        self_obs,
+                        F.one_hot(torch.tensor(step_counter, device=self.device),self.trajectory_length)
                     ), dim=0
                 )
 
@@ -577,22 +659,22 @@ class SamplerFCNFig8(nn.Module):
         obs,
         step_counter
     ):
-        
+        self_obs = obs[0][:27].double()
         bool_obs = obs.bool()[0]
         cur_node = utils.get_loc(bool_obs, 27) + 1
         if self.embedding == "number":
             embedding = torch.cat(
                     (   
-                        F.one_hot(torch.tensor(cur_node, device=self.device), self.self_size),
-                        F.one_hot(self.trajectory_length, step_counter)
+                        self_obs,
+                        F.one_hot(torch.tensor(step_counter, device=self.device),self.trajectory_length)
                     ), dim=0
                 )
 
-        # focusing on fig 8 for now where there is no reward
+        # focusing on fig 8 for now where there is no reward node
         elif self.embedding == "coordinate":
             embedding = torch.cat(
                         (
-                            torch.tensor([self.map.n_info[cur_node][0], self.map.n_info[cur_node][1]],dtype=float, device=self.device),
+                            torch.tensor([self.map.n_info[cur_node][0], self.map.n_info[cur_node][1]], dtype=float, device=self.device),
                             F.one_hot(torch.tensor(step_counter, device=self.device), self.trajectory_length)
                         ), dim=0
                     )
@@ -607,7 +689,6 @@ class SamplerFCNFig8(nn.Module):
     ):
         return 0
     
-
 class SimpleNetwork(nn.Module):
     def __init__(self):
         super(SimpleNetwork, self).__init__()

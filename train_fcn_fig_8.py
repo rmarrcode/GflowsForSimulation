@@ -33,7 +33,7 @@ import random
 import networkx as nx
 import matplotlib.pyplot as plt
 
-NUM_EPOCHS = 140000
+NUM_EPOCHS = 100000
 # default = 34
 BATCH_SIZE = 100
 LEARNING_RATE = 3e-4
@@ -55,7 +55,9 @@ def state_to_vec(state):
     return torch.tensor(result).float()
 
 def compute_reward(state):
-    if state == 17:
+    if state == 10:
+        return 2
+    if state == 2:
         return 1
     return 0
 
@@ -74,16 +76,15 @@ def convert_discrete_action_to_multidiscrete(action):
 config = {
     "custom_model_config": {
         "custom_model": "fcn", #fcn #attn_fcn
-        "reward": "single", #random_region random single complex
+        "reward": "complex", #random_region random single complex
         "reward_interval": "step", #trajectory 
         "trajectory_per_reward": 1,
-        "embedding": "coordinate", #number #coordinate
+        "embedding": "number", #number #coordinate
         "is_dynamic_embedding": False,
-        "trajectory_length": 5,
+        "trajectory_length": 34,
         "nred": 1,
         "nblue": 1,
         "start_node": 22,
-        "reward_node": 17,
         "aggregation_fn": "agent_node",
         "hidden_size": 15,
         "is_hybrid": False,
@@ -130,7 +131,7 @@ if WANDB:
     )
 
 gflowfigure8 = GlowFigure8Squad(sampler_config=config)
-optimizer = optim.AdamW(gflowfigure8.sampler_fcn_simple.parameters(), lr=LEARNING_RATE)
+optimizer = optim.AdamW(gflowfigure8.sampler_fcn_fig8.parameters(), lr=LEARNING_RATE)
 
 
 # In[3]:
@@ -152,29 +153,30 @@ while episode <= NUM_EPOCHS:
   total_P_F = 0
   total_P_B = 0
   total_reward = 0
-
-  reward_node = config['custom_model_config']['reward_node']
-  reward_node = [reward_node]
-
+    
   gflowfigure8.reset()
 
   trajectory_length = config['custom_model_config']['trajectory_length']
 
   trajectory_path = []
   action_path = []
-  
   for t in range(trajectory_length):
-    step = gflowfigure8.step_fcn_simple(TEMP_AGENT_INDEX)  
+    step = gflowfigure8.step_fcn_complex(TEMP_AGENT_INDEX)  
     total_P_F += step['forward_prob']
     total_P_B += step['backward_prob']
+    total_reward += step['step_reward']
     trajectory_path.append(step['red_node'])
     action_path.append(step['action'])
 
-  logZ = gflowfigure8.sampler_fcn_simple.logZ
+  logZ = gflowfigure8.sampler_fcn_fig8.logZ
   
-  last_red_node = gflowfigure8.team_red[TEMP_AGENT_INDEX].get_info()["node"]
-  total_reward = compute_reward(last_red_node)
+  if config['custom_model_config']['reward'] == 'complex':
+    episode_reward = gflowfigure8._episode_rewards_aggressive()[0]
+    total_reward += episode_reward
+    
   clipped_reward = torch.log(torch.tensor(total_reward)).clip(-20)
+
+  # clipped_reward = torch.log(torch.tensor(end_rewards)).clip(-20)
 
   loss = (logZ + total_P_F - clipped_reward - total_P_B).pow(2)
 
@@ -212,10 +214,5 @@ while episode <= NUM_EPOCHS:
 # In[ ]:
 
 
-for t in range(trajectory_length):
-  step = gflowfigure8.step_fcn_simple(TEMP_AGENT_INDEX, reward_node)  
-  total_P_F += step['forward_prob']
-  total_P_B += step['backward_prob']
-  trajectory_path.append(step['red_node'])
-print(trajectory_path)
+torch.save(gflowfigure8, f'models/{run_name}.pt')
 

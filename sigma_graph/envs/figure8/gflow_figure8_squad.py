@@ -81,10 +81,24 @@ class GlowFigure8Squad():
         self.is_dynamic_embedding = sampler_config['custom_model_config']['is_dynamic_embedding']
 
         self.sampler_fcn_simple = SamplerFCNSimple(
-            self_size=27,
             num_hiddens=512,
             num_outputs=15,
+            embedding=sampler_config["custom_model_config"]["embedding"],
+            map = self.map
         )
+        self.sampler_fig8 = SamplerFig8CoordinateTime(
+            self_size=27,
+            num_hiddens_action=512,
+            num_outputs_action=15,
+            out_features=28,
+            n_heads=1,
+            map=self.map,
+            nred=sampler_config['custom_model_config']['nred'],
+            nblue=sampler_config['custom_model_config']['nblue'],
+            embedding = self.embedding,
+            is_dynamic_embedding = self.is_dynamic_embedding
+        )
+
         if sampler_config['custom_model_config']['custom_model'] == 'gnn':
             self.sampler = SamplerGNN(
                 obs_space=self.__observation_space,
@@ -161,7 +175,7 @@ class GlowFigure8Squad():
 
 
     def update_reward(self, reward_nodes):
-        self.sampler.update_reward(reward_nodes)
+        self.sampler_fig8.update_reward(reward_nodes)
     # use observation from state var
     # make actions
     # update state 
@@ -231,6 +245,53 @@ class GlowFigure8Squad():
             'blue_node': blue_node
         })
     
+    def step_fcn_complex(self, a_id):
+
+        red_node = self.team_red[0].get_info()["node"]
+        blue_node = self.team_blue[0].get_info()["node"]
+        prev_obs = self._log_step_prev()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+        obs = torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device)
+
+        #probs_forward = self.sampler_fig8.forward(obs, self.step_counter)
+        probs_forward = self.sampler_fig8.forward(obs, [17])
+
+        # TODO fix this
+        cat = Categorical(logits=probs_forward)
+        discrete_action = cat.sample()
+        forward_prob = cat.log_prob(discrete_action)
+        action = self.convert_discrete_action_to_multidiscrete(discrete_action)
+        action[0] = action[0].cpu().tolist()
+        action[1] = action[1].cpu().tolist()
+        action = [action]
+
+        probs_backward = self.sampler_fig8.backward(obs)
+        backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
+
+        flow = self.sampler_fig8.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+
+        # update log
+        self._log_step_update(prev_obs, [action,], [0,])
+        action_penalty_red = self._take_action_red(action)
+        self._take_action_blue()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+        self.agent_interaction(R_engage_B, B_engage_R)
+
+        self.step_counter += 1
+
+        step_reward = self._step_rewards_aggresssive(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0] 
+
+        return ({
+            'done': False,
+            'forward_prob': forward_prob,
+            'backward_prob': backward_prob,
+            'flow': flow,
+            'action': action,
+            'step_reward': step_reward,
+            'red_node': red_node,
+            'blue_node': blue_node
+        })
+
     def step_fcn_simple(self, a_id):
 
         red_node = self.team_red[0].get_info()["node"]
