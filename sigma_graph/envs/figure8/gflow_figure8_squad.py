@@ -79,6 +79,7 @@ class GlowFigure8Squad():
         self.custom_model = sampler_config['custom_model_config']['custom_model']
         self.embedding = sampler_config['custom_model_config']['embedding']
         self.is_dynamic_embedding = sampler_config['custom_model_config']['is_dynamic_embedding']
+        self.trajectory_length = sampler_config['custom_model_config']['trajectory_length']
 
         self.sampler_fcn_simple = SamplerFCNSimple(
             num_hiddens=512,
@@ -86,17 +87,12 @@ class GlowFigure8Squad():
             embedding=sampler_config["custom_model_config"]["embedding"],
             map = self.map
         )
-        self.sampler_fig8 = SamplerFig8CoordinateTime(
-            self_size=27,
-            num_hiddens_action=512,
-            num_outputs_action=15,
-            out_features=28,
-            n_heads=1,
-            map=self.map,
-            nred=sampler_config['custom_model_config']['nred'],
-            nblue=sampler_config['custom_model_config']['nblue'],
-            embedding = self.embedding,
-            is_dynamic_embedding = self.is_dynamic_embedding
+        self.sampler_fcn_coordinate_time = SamplerFcnCoordinateTime(
+            num_hiddens=512,
+            num_outputs=15,
+            embedding=self.embedding,
+            trajectory_length=self.trajectory_length,
+            map=self.map
         )
 
         if sampler_config['custom_model_config']['custom_model'] == 'gnn':
@@ -174,8 +170,7 @@ class GlowFigure8Squad():
         return (action_prob, [action])
 
 
-    def update_reward(self, reward_nodes):
-        self.sampler_fig8.update_reward(reward_nodes)
+
     # use observation from state var
     # make actions
     # update state 
@@ -245,7 +240,10 @@ class GlowFigure8Squad():
             'blue_node': blue_node
         })
     
-    def step_fcn_complex(self, a_id):
+    def reset_state(self):
+        self.sampler_fcn_coordinate_time.reset_state()
+
+    def step_fcn_coordinate_time(self, a_id):
 
         red_node = self.team_red[0].get_info()["node"]
         blue_node = self.team_blue[0].get_info()["node"]
@@ -253,8 +251,8 @@ class GlowFigure8Squad():
         R_engage_B, B_engage_R, R_overlay = self._update()
         obs = torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device)
 
-        #probs_forward = self.sampler_fig8.forward(obs, self.step_counter)
-        probs_forward = self.sampler_fig8.forward(obs, [17])
+        probs_forward = self.sampler_fcn_coordinate_time.forward(obs, self.step_counter)
+        #probs_forward = self.sampler_fig8.forward(obs, [17])
 
         # TODO fix this
         cat = Categorical(logits=probs_forward)
@@ -265,10 +263,10 @@ class GlowFigure8Squad():
         action[1] = action[1].cpu().tolist()
         action = [action]
 
-        probs_backward = self.sampler_fig8.backward(obs)
+        probs_backward = self.sampler_fcn_coordinate_time.backward(obs, self.step_counter)
         backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
 
-        flow = self.sampler_fig8.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+        flow = self.sampler_fcn_coordinate_time.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
 
         # update log
         self._log_step_update(prev_obs, [action,], [0,])
@@ -335,7 +333,6 @@ class GlowFigure8Squad():
             'action': action,
             'red_node': red_node,
         })
-
 
     def step_simple(self, a_id):
 

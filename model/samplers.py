@@ -460,120 +460,82 @@ class SamplerFCNSimple(nn.Module):
     ):
         return 0
 
-class SamplerFig8CoordinateTime(nn.Module):    
+class SamplerFcnCoordinateTime(nn.Module):    
     def __init__(
-            self,
-            self_size,
-            num_hiddens_action,
-            num_outputs_action,
-            out_features,
-            n_heads,
-            map,
-            embedding,
-            **kwargs
-        ):
-            nn.Module.__init__(self)
+        self,
+        num_hiddens,
+        num_outputs,
+        embedding,
+        trajectory_length,
+        map
+    ):
+        nn.Module.__init__(self)
 
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.embedding_size = 2 * trajectory_length
 
-            self.self_size = self_size
-            self.num_hiddens_action = num_hiddens_action
-            self.num_outputs_action = num_outputs_action
-            self.out_features = out_features
-            self.n_heads = n_heads
-            self.embedding = embedding
-            self.map = map
+        self.num_hiddens = num_hiddens
+        self.num_outputs = num_outputs
+        self.map = map
+        self.embedding = embedding
+        self.trajectory_length = trajectory_length
 
-            # acurate???
-            #self.reward_nodes = [2]
+        self.mlp_forward = nn.Sequential(
+                                nn.Linear(self.embedding_size, num_hiddens, dtype=float),
+                                nn.LeakyReLU(),
+                                nn.Linear(num_hiddens, num_outputs, dtype=float))
+        self.mlp_backward = nn.Sequential(
+                                nn.Linear(self.embedding_size, num_hiddens, dtype=float), 
+                                nn.LeakyReLU(),
+                                nn.Linear(num_hiddens, num_outputs, dtype=float))
+        
+        self.logZ = nn.Parameter(torch.ones(1))
 
-            adj_matrix = torch.tensor(nx.adjacency_matrix(self.map.g_acs).toarray(), device=self.device)
-            self.adj_matrix = adj_matrix.reshape((27, 27, 1))
+        self.gflow_state = torch.zeros(2 * self.trajectory_length)
 
-            if self.embedding == "number":
-                in_features = self_size
-            elif self.embedding == "coordinate":
-                in_features = 2
-
-            self.mlp_forward = nn.Sequential(
-                nn.Linear(in_features+2, num_hiddens_action, dtype=float),
-                nn.LeakyReLU(),
-                nn.Linear(num_hiddens_action, num_outputs_action, dtype=float))
-            self.mlp_backward = nn.Sequential(
-                nn.Linear(self_size, num_hiddens_action, dtype=float), 
-                nn.LeakyReLU(),
-                nn.Linear(num_hiddens_action, num_outputs_action, dtype=float))
-            
-            self.logZ = nn.Parameter(torch.ones(1))
-
-            n_hidden = 32 
-            dropout = 0.6
-            self.layer1 = GraphAttentionLayer(in_features+1, n_hidden, n_heads, is_concat=True, dropout=dropout)
-            self.activation = nn.ELU()
-            self.layer2 = GraphAttentionLayer(n_hidden, n_hidden, n_heads, is_concat=True, dropout=dropout)
-            self.output = GraphAttentionLayer(n_hidden, in_features+1, 1, is_concat=False, dropout=dropout)
-            self.dropout = nn.Dropout(dropout)
-            
-            self.to(self.device)
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-    def update_reward(self, reward_nodes):
-        if self.embedding == "number":
-            self.dynamic_embedding = torch.stack([
-                torch.cat(
-                    (   
-                        F.one_hot(torch.tensor(node, device=self.device), self.self_size),
-                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
-                    ), dim=0
-                )
-                for node in range(self.self_size)
-            ])  
-        elif self.embedding == "coordinate":
-            self.dynamic_embedding = torch.stack([
-                torch.cat(
-                    (   
-                        torch.tensor([self.map.n_info[node+1][0], self.map.n_info[node+1][1]], device=self.device),
-                        torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device)
-                    ), dim=0
-                )
-                for node in range(self.self_size)
-            ])  
-        else:
-            #TODO: throw some error 
-            pass
-
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
         self.to(self.device)
 
     def convert_discrete_action_to_multidiscrete(self, action):
         return [action % len(local_action_move), action // len(local_action_move)]
 
-    def forward(self, obs, reward_nodes):
-        
-        x = self.dropout(self.dynamic_embedding)
-        x = self.layer1(x, self.adj_matrix)
-        x = self.activation(x)
-        x = self.dropout(x)
-        x = self.layer2(x, self.adj_matrix)
-        x = self.activation(x)
-        x = self.output(x, self.adj_matrix)
+    def reset_state(self):
+        self.gflow_state = torch.zeros(2 * self.trajectory_length, device=self.device, dtype=float)
 
+    def forward(
+        self,
+        obs,
+        step_counter
+    ):
         bool_obs = obs.bool()[0]
-        cur_node = utils.get_loc(bool_obs, self.self_size) + 1
+        cur_node = utils.get_loc(bool_obs, 27) + 1
 
-        reward_nodes = torch.stack([torch.tensor([1.0] if (node + 1) in reward_nodes else [0.0], dtype=float, device=self.device) for node in range(self.self_size)])
-        final_embeddings = torch.cat((self.dynamic_embedding, reward_nodes), dim=1)
-        probs = self.mlp_forward(final_embeddings[cur_node-1])
+        self.embedding = self.gflow_state.clone()
+        self.embedding[step_counter*2] = self.map.n_info[cur_node][0]
+        self.embedding[step_counter*2+1] = self.map.n_info[cur_node][1]
+
+        self.gflow_state = self.embedding.clone()
+
+        probs = self.mlp_forward(self.gflow_state)
 
         return probs
-
+    
     def backward(
         self,
         obs,
-    ):  
-        self_size = self.self_size
-        self_obs = obs[0][:self_size].double()
-        probs = self.mlp_backward(self_obs)
+        step_counter
+    ):
+        bool_obs = obs.bool()[0]
+        cur_node = utils.get_loc(bool_obs, 27) + 1
+
+        self.embedding = self.gflow_state.clone()
+        self.embedding[step_counter*2] = self.map.n_info[cur_node][0]
+        self.embedding[step_counter*2+1] = self.map.n_info[cur_node][1]
+
+        self.gflow_state = self.embedding.clone()
+
+        probs = self.mlp_backward(self.gflow_state)
 
         return probs
     
@@ -582,6 +544,7 @@ class SamplerFig8CoordinateTime(nn.Module):
         obs,
     ):
         return 0
+    
 
 class SamplerFCNFig8(nn.Module):
     def __init__(
