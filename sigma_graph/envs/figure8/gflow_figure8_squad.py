@@ -94,7 +94,13 @@ class GlowFigure8Squad():
             trajectory_length=self.trajectory_length,
             map=self.map
         )
-
+        self.sampler_fig8_gat_coordinate_time = SamplerFig8GATCoordinateTime(
+            num_hiddens_action=512,
+            num_outputs_action=15,
+            trajectory_length=self.trajectory_length,
+            map=self.map
+        )
+        self.total_reward = 0
         if sampler_config['custom_model_config']['custom_model'] == 'gnn':
             self.sampler = SamplerGNN(
                 obs_space=self.__observation_space,
@@ -242,9 +248,11 @@ class GlowFigure8Squad():
     
     def reset_state(self):
         self.sampler_fcn_coordinate_time.reset_state()
+        self.total_reward = 0
+        self.prev_blue = None
 
     def step_fcn_coordinate_time(self, a_id):
-
+        print('AAAAAA')
         red_node = self.team_red[0].get_info()["node"]
         blue_node = self.team_blue[0].get_info()["node"]
         prev_obs = self._log_step_prev()
@@ -252,18 +260,21 @@ class GlowFigure8Squad():
         obs = torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device)
 
         probs_forward = self.sampler_fcn_coordinate_time.forward(obs, self.step_counter)
-        #probs_forward = self.sampler_fig8.forward(obs, [17])
 
-        # TODO fix this
-        cat = Categorical(logits=probs_forward)
-        discrete_action = cat.sample()
-        forward_prob = cat.log_prob(discrete_action)
+        norms_prob_forward = F.normalize(probs_forward, p=1, dim=0)
+        discrete_action = torch.multinomial(norms_prob_forward, 1, replacement=True)[0]
+        forward_prob = torch.log(norms_prob_forward[discrete_action])
+
+        # cat = Categorical(logits=probs_forward)
+        # discrete_action = cat.sample()
+        # forward_prob = cat.log_prob(discrete_action)
+
         action = self.convert_discrete_action_to_multidiscrete(discrete_action)
         action[0] = action[0].cpu().tolist()
         action[1] = action[1].cpu().tolist()
         action = [action]
 
-        probs_backward = self.sampler_fcn_coordinate_time.backward(obs, self.step_counter)
+        probs_backward = self.sampler_fcn_coordinate_time.backward(obs)
         backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
 
         flow = self.sampler_fcn_coordinate_time.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
@@ -277,7 +288,87 @@ class GlowFigure8Squad():
 
         self.step_counter += 1
 
-        step_reward = self._step_rewards_aggresssive(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0] 
+        step_reward = int(red_node == blue_node) #int(R_overlay[0])
+        self.total_reward += step_reward
+        #step_reward = self._step_rewards_aggresssive(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0] 
+
+        return ({
+            'done': False,
+            'forward_prob': forward_prob,
+            'backward_prob': backward_prob,
+            'flow': flow,
+            'action': action,
+            'step_reward': step_reward,
+            'red_node': red_node,
+            'blue_node': blue_node
+        })
+
+    
+    def reset_state_gat_coordinate_time(self):
+        self.sampler_fig8_gat_coordinate_time.reset_state()
+        self.total_reward = 0
+        self.prev_blue = None
+        self.step_counter = 0
+
+    # cur time is defined by conditions before function iscalled
+    def step_gat_coordinate_time(self, a_id):
+
+        red_node = self.team_red[0].get_info()["node"]
+        blue_node = self.team_blue[0].get_info()["node"]
+
+        agent_encoding = self.team_red[0].agent_code
+        # is prev_red real????
+        prev_red, list_neighbors, list_acts = self.map.get_all_states_by_node(agent_encoding)
+
+        _route = self.team_blue[0].get_route()
+        _idx = (self.step_counter + self.blue_offsets[0] + 1) % self.routes[_route].get_route_length()
+        next_blue_node, _, _ = self.routes[_route].get_location_by_index(_idx)
+
+        prev_obs = self._log_step_prev()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+        obs = torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device)
+
+        probs_forward = self.sampler_fig8_gat_coordinate_time.forward(
+                                                                obs=obs, 
+                                                                cur_blue=blue_node,
+                                                                red_neighbors=list_neighbors,
+                                                                prev_red=prev_red,
+                                                                prev_blue=self.prev_blue,
+                                                                next_blue=next_blue_node,
+                                                                step_counter=self.step_counter)
+
+        # norms_prob_forward = F.normalize(probs_forward, p=1, dim=0)
+        # discrete_action = torch.multinomial(norms_prob_forward, 1, replacement=True)[0]
+        # forward_prob = torch.log(norms_prob_forward[discrete_action])
+
+        cat = Categorical(logits=probs_forward)
+        discrete_action = cat.sample()
+        forward_prob = cat.log_prob(discrete_action)
+
+        action = self.convert_discrete_action_to_multidiscrete(discrete_action)
+        action[0] = action[0].cpu().tolist()
+        action[1] = action[1].cpu().tolist()
+        action = [action]
+
+        probs_backward = self.sampler_fcn_coordinate_time.backward(obs)
+        backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
+
+        flow = self.sampler_fcn_coordinate_time.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+
+        # update log
+        self._log_step_update(prev_obs, [action,], [0,])
+        action_penalty_red = self._take_action_red(action)
+        self._take_action_blue()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+        self.agent_interaction(R_engage_B, B_engage_R)
+
+        self.prev_blue = blue_node
+
+        self.step_counter += 1
+
+        step_reward = int(red_node == blue_node) #int(R_overlay[0])
+        self.total_reward += step_reward
+        #step_reward = self._step_rewards_aggresssive(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0] 
 
         return ({
             'done': False,

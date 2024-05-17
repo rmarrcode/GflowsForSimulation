@@ -13,6 +13,7 @@ import matplotlib.pyplot as pp
 import numpy as np
 from ipywidgets import interact, IntSlider, fixed
 
+from sigma_graph.data.file_manager import load_graph_files, save_log_2_file, log_done_reward
 from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP, TURN_90_LOOKUP
 from sigma_graph.envs.figure8.default_setup import OBS_TOKEN
 from sigma_graph.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
@@ -77,9 +78,9 @@ config = {
         "reward": "complex", #random_region random single complex
         "reward_interval": "step", #trajectory 
         "trajectory_per_reward": 1,
-        "embedding": "coordinate", #number #coordinate
+        "embedding": "number", #number #coordinate
         "is_dynamic_embedding": False,
-        "trajectory_length": 4,
+        "trajectory_length": 5,
         "nred": 1,
         "nblue": 1,
         "start_node": 22,
@@ -129,11 +130,13 @@ if WANDB:
     )
 
 gflowfigure8 = GlowFigure8Squad(sampler_config=config)
-optimizer = optim.AdamW(gflowfigure8.sampler_fig8.parameters(), lr=LEARNING_RATE)
+optimizer = optim.AdamW(gflowfigure8.sampler_fig8_gat_coordinate_time.parameters(), lr=LEARNING_RATE)
 
 
 # In[3]:
 
+
+# FCN coordinate time
 
 minibatch_loss = 0
 minibatch_reward = 0
@@ -144,10 +147,6 @@ minibatch_pb = 0
 pbar = tqdm(total=NUM_EPOCHS)
 episode = 0
 
-#remove
-gflowfigure8.update_reward([17])
-#remove
-
 while episode <= NUM_EPOCHS:
   
   TEMP_AGENT_INDEX = 0
@@ -156,28 +155,28 @@ while episode <= NUM_EPOCHS:
   total_P_B = 0
   total_reward = 0
     
-  gflowfigure8.reset()
-
   trajectory_length = config['custom_model_config']['trajectory_length']
 
   trajectory_path = []
   action_path = []
+  gflowfigure8.reset()
+  gflowfigure8.reset_state_gat_coordinate_time()
   for t in range(trajectory_length):
-    step = gflowfigure8.step_fcn_complex(TEMP_AGENT_INDEX)  
+    step = gflowfigure8.step_gat_coordinate_time(TEMP_AGENT_INDEX)  
     total_P_F += step['forward_prob']
     total_P_B += step['backward_prob']
     total_reward += step['step_reward']
     trajectory_path.append(step['red_node'])
     action_path.append(step['action'])
 
-  logZ = gflowfigure8.sampler_fig8.logZ
+  logZ = gflowfigure8.sampler_fcn_coordinate_time.logZ
     
-  #clipped_reward = torch.log(torch.tensor(total_reward)).clip(-20)
-  last_node = gflowfigure8.team_red[0].get_info()["node"]
-  clipped_reward = torch.log(torch.tensor(compute_reward(last_node))).clip(-20)
+  clipped_reward = torch.log(torch.tensor(total_reward)).clip(-20)
+  #last_node = gflowfigure8.team_red[0].get_info()["node"]
+  #clipped_reward = torch.log(torch.tensor(compute_reward(last_node))).clip(-20)
 
   loss = (logZ + total_P_F - clipped_reward - total_P_B).pow(2)
-
+  
   minibatch_loss += loss
   minibatch_reward += clipped_reward
   minibatch_z += logZ
@@ -213,4 +212,92 @@ while episode <= NUM_EPOCHS:
 
 
 torch.save(gflowfigure8, f'models/{run_name}.pt')
+
+
+# In[ ]:
+
+
+gflowfigure8.reset()
+red_path = []
+blue_path = []
+step_rewards = []
+total_reward = 0
+for r in range(34):   
+    step = gflowfigure8.step_fcn_coordinate_time(0)
+    red_path.append(step['red_node'])
+    blue_path.append(step['blue_node'])
+    step_rewards.append(step['step_reward'])
+    total_reward += step['step_reward']
+
+print(f'step_rewards {total_reward}')
+episode_reward = gflowfigure8._episode_rewards_aggressive()[0]
+print(f'episode_reward {episode_reward}')
+total_reward += episode_reward
+print(f'total_reward {total_reward}')
+
+
+# In[ ]:
+
+
+map_info, _ = load_graph_files(map_lookup="S")
+col_map = ["gold"] * len(map_info.n_info)
+
+def display_graph(index):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cur_col_map = col_map[:]
+    cur_col_map[red_path[index]-1] = "red"
+    cur_col_map[blue_path[index]-1] = "blue"
+    nx.draw_networkx(map_info.g_acs, pos=map_info.n_info, node_color=cur_col_map, edge_color="blue", arrows=True, ax=ax)
+    ax.set_title(f"step rewards {step_rewards[index]}")
+    plt.axis('off')
+    plt.show()
+
+# Create an interactive widget to display different graphs
+slider = IntSlider(min=0, max=33-1, step=1, value=0, description='Graph Index')
+interact(display_graph, index=slider)
+
+
+# In[ ]:
+
+
+gflowfigure8.reset()
+red_path = []
+blue_path = []
+step_rewards = []
+total_reward = 0
+for r in range(34):   
+    step = gflowfigure8.step_fcn_coordinate_time(0)
+    red_path.append(step['red_node'])
+    blue_path.append(step['blue_node'])
+    step_rewards.append(step['step_reward'])
+    total_reward += step['step_reward']
+
+print(f'step_rewards {total_reward}')
+episode_reward = gflowfigure8._episode_rewards_aggressive()[0]
+print(f'episode_reward {episode_reward}')
+total_reward += episode_reward
+print(f'total_reward {total_reward}')
+
+
+# In[ ]:
+
+
+map_info, _ = load_graph_files(map_lookup="S")
+col_map = ["gold"] * len(map_info.n_info)
+
+def display_graph(index):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cur_col_map = col_map[:]
+    cur_col_map[red_path[index]-1] = "red"
+    cur_col_map[blue_path[index]-1] = "blue"
+    print(map_info.g_acs)
+    print(map_info.n_info)
+    nx.draw_networkx(map_info.g_acs, pos=map_info.n_info, node_color=cur_col_map, edge_color="blue", arrows=True, ax=ax)
+    ax.set_title(f"step rewards {step_rewards[index+1]}")
+    plt.axis('off')
+    plt.show()
+
+# Create an interactive widget to display different graphs
+slider = IntSlider(min=0, max=33, step=1, value=0, description='Graph Index')
+interact(display_graph, index=slider)
 
