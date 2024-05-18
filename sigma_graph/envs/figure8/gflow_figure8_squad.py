@@ -246,13 +246,12 @@ class GlowFigure8Squad():
             'blue_node': blue_node
         })
     
-    def reset_state(self):
+    def reset_state_fcn_coordinate_time(self):
+        self.reset()
         self.sampler_fcn_coordinate_time.reset_state()
         self.total_reward = 0
-        self.prev_blue = None
 
     def step_fcn_coordinate_time(self, a_id):
-        print('AAAAAA')
         red_node = self.team_red[0].get_info()["node"]
         blue_node = self.team_blue[0].get_info()["node"]
         prev_obs = self._log_step_prev()

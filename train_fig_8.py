@@ -34,7 +34,7 @@ import random
 import networkx as nx
 import matplotlib.pyplot as plt
 
-NUM_EPOCHS = 100000
+NUM_EPOCHS = 200000
 # default = 34
 BATCH_SIZE = 100
 LEARNING_RATE = 3e-4
@@ -80,10 +80,10 @@ config = {
         "trajectory_per_reward": 1,
         "embedding": "number", #number #coordinate
         "is_dynamic_embedding": False,
-        "trajectory_length": 5,
+        "trajectory_length": 10,
         "nred": 1,
         "nblue": 1,
-        "start_node": 22,
+        "start_node": 24,
         "aggregation_fn": "agent_node",
         "hidden_size": 15,
         "is_hybrid": False,
@@ -212,92 +212,3 @@ while episode <= NUM_EPOCHS:
 
 
 torch.save(gflowfigure8, f'models/{run_name}.pt')
-
-
-# In[ ]:
-
-
-gflowfigure8.reset()
-red_path = []
-blue_path = []
-step_rewards = []
-total_reward = 0
-for r in range(34):   
-    step = gflowfigure8.step_fcn_coordinate_time(0)
-    red_path.append(step['red_node'])
-    blue_path.append(step['blue_node'])
-    step_rewards.append(step['step_reward'])
-    total_reward += step['step_reward']
-
-print(f'step_rewards {total_reward}')
-episode_reward = gflowfigure8._episode_rewards_aggressive()[0]
-print(f'episode_reward {episode_reward}')
-total_reward += episode_reward
-print(f'total_reward {total_reward}')
-
-
-# In[ ]:
-
-
-map_info, _ = load_graph_files(map_lookup="S")
-col_map = ["gold"] * len(map_info.n_info)
-
-def display_graph(index):
-    fig, ax = plt.subplots(figsize=(8, 6))
-    cur_col_map = col_map[:]
-    cur_col_map[red_path[index]-1] = "red"
-    cur_col_map[blue_path[index]-1] = "blue"
-    nx.draw_networkx(map_info.g_acs, pos=map_info.n_info, node_color=cur_col_map, edge_color="blue", arrows=True, ax=ax)
-    ax.set_title(f"step rewards {step_rewards[index]}")
-    plt.axis('off')
-    plt.show()
-
-# Create an interactive widget to display different graphs
-slider = IntSlider(min=0, max=33-1, step=1, value=0, description='Graph Index')
-interact(display_graph, index=slider)
-
-
-# In[ ]:
-
-
-gflowfigure8.reset()
-red_path = []
-blue_path = []
-step_rewards = []
-total_reward = 0
-for r in range(34):   
-    step = gflowfigure8.step_fcn_coordinate_time(0)
-    red_path.append(step['red_node'])
-    blue_path.append(step['blue_node'])
-    step_rewards.append(step['step_reward'])
-    total_reward += step['step_reward']
-
-print(f'step_rewards {total_reward}')
-episode_reward = gflowfigure8._episode_rewards_aggressive()[0]
-print(f'episode_reward {episode_reward}')
-total_reward += episode_reward
-print(f'total_reward {total_reward}')
-
-
-# In[ ]:
-
-
-map_info, _ = load_graph_files(map_lookup="S")
-col_map = ["gold"] * len(map_info.n_info)
-
-def display_graph(index):
-    fig, ax = plt.subplots(figsize=(8, 6))
-    cur_col_map = col_map[:]
-    cur_col_map[red_path[index]-1] = "red"
-    cur_col_map[blue_path[index]-1] = "blue"
-    print(map_info.g_acs)
-    print(map_info.n_info)
-    nx.draw_networkx(map_info.g_acs, pos=map_info.n_info, node_color=cur_col_map, edge_color="blue", arrows=True, ax=ax)
-    ax.set_title(f"step rewards {step_rewards[index+1]}")
-    plt.axis('off')
-    plt.show()
-
-# Create an interactive widget to display different graphs
-slider = IntSlider(min=0, max=33, step=1, value=0, description='Graph Index')
-interact(display_graph, index=slider)
-
