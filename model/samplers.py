@@ -603,14 +603,9 @@ class SamplerFcnCoordinateTime(nn.Module):
         self.trajectory_length = trajectory_length
 
         self.mlp_forward = nn.Sequential(
-                                nn.Dropout(),
                                 nn.Linear(self.embedding_size, num_hiddens, dtype=float),
                                 nn.LeakyReLU(),
-                                nn.Dropout(),
                                 nn.Linear(num_hiddens, num_outputs, dtype=float),
-                                nn.LeakyReLU(),
-                                nn.Dropout(),
-                                nn.Linear(num_outputs, num_outputs, dtype=float),
                                 nn.ReLU())
         self.mlp_backward = nn.Sequential(
                                 nn.Linear(27, num_hiddens, dtype=float), 

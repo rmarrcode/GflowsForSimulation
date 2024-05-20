@@ -302,6 +302,58 @@ class GlowFigure8Squad():
             'blue_node': blue_node
         })
 
+    def step_fcn_coordinate_time_deterministic(self, a_id):
+        red_node = self.team_red[0].get_info()["node"]
+        blue_node = self.team_blue[0].get_info()["node"]
+        prev_obs = self._log_step_prev()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+        obs = torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device)
+
+        probs_forward = self.sampler_fcn_coordinate_time.forward(obs, self.step_counter)
+
+        max_val, discrete_action = torch.max(probs_forward, dim=0)
+
+        # norms_prob_forward = F.normalize(probs_forward, p=1, dim=0)
+        # discrete_action = torch.multinomial(norms_prob_forward, 1, replacement=True)[0]
+        # forward_prob = torch.log(norms_prob_forward[discrete_action])
+
+        # cat = Categorical(logits=probs_forward)
+        # discrete_action = cat.sample()
+        # forward_prob = cat.log_prob(discrete_action)
+
+        action = self.convert_discrete_action_to_multidiscrete(discrete_action)
+        action[0] = action[0].cpu().tolist()
+        action[1] = action[1].cpu().tolist()
+        action = [action]
+
+        probs_backward = self.sampler_fcn_coordinate_time.backward(obs)
+        backward_prob = Categorical(logits=probs_backward).log_prob(discrete_action)
+
+        flow = self.sampler_fcn_coordinate_time.flow(torch.tensor(np.array([self.states[a_id],], dtype=np.int8), device=device))
+
+        # update log
+        self._log_step_update(prev_obs, [action,], [0,])
+        action_penalty_red = self._take_action_red(action)
+        self._take_action_blue()
+        R_engage_B, B_engage_R, R_overlay = self._update()
+        self.agent_interaction(R_engage_B, B_engage_R)
+
+        self.step_counter += 1
+
+        step_reward = int(red_node == blue_node) #int(R_overlay[0])
+        self.total_reward += step_reward
+        #step_reward = self._step_rewards_aggresssive(action_penalty_red, R_engage_B, B_engage_R, R_overlay)[0] 
+
+        return ({
+            'done': False,
+            'backward_prob': backward_prob,
+            'flow': flow,
+            'action': action,
+            'step_reward': step_reward,
+            'red_node': red_node,
+            'blue_node': blue_node
+        })
+
     
     def reset_state_gat_coordinate_time(self):
         self.sampler_fig8_gat_coordinate_time.reset_state()
