@@ -80,7 +80,7 @@ config = {
         "trajectory_per_reward": 1,
         "embedding": "number", #number #coordinate
         "is_dynamic_embedding": False,
-        "trajectory_length": 10,
+        "trajectory_length": 5,
         "nred": 1,
         "nblue": 1,
         "start_node": 24,
@@ -171,6 +171,8 @@ while episode <= NUM_EPOCHS:
 
   logZ = gflowfigure8.sampler_fcn_coordinate_time.logZ
     
+  total_reward = 1 if trajectory_path[-1] == 17 else 0
+
   clipped_reward = torch.log(torch.tensor(total_reward)).clip(-20)
   #last_node = gflowfigure8.team_red[0].get_info()["node"]
   #clipped_reward = torch.log(torch.tensor(compute_reward(last_node))).clip(-20)
